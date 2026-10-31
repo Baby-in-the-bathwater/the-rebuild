@@ -99,7 +99,7 @@ def main(argv=None):
     lineage = report.lineage_table(own_bundles, chain, league.pdb, rid, league) if not a.no_history else []
 
     # outputs
-    ct = report.call_text(g, league, bm)
+    ct = report.call_text(g, league, bm, assets)
     data = board.board_data(league, values, g, assets, ds, ct)
     html = board.render(data, os.path.join(out, "trade-board.html"))
     md = report.write(os.path.join(out, "brief.md"), league, values, g, assets, ds, bm, lineage, shipped_note)

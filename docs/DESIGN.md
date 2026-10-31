@@ -25,7 +25,7 @@ walk_lineage -> previous_league_id chain, one bundle per season (cached forever 
 benchmark    -> shipped JSON for the format family, or discover_pool + crawl_lineages + build
 grade        -> team_rows (own league) -> z within league -> percentile on the pool -> the call
 classify_assets -> sell / hold / keep
-deals        -> counterparties -> tradeable items -> Ask / Target / Floor packages
+deals        -> counterparties -> tradeable items -> Ask / Target / Floor packages (sells) and Open / Target / Ceiling packages (buys)
 board.render + report.write
 ```
 
@@ -68,13 +68,17 @@ Sell age by position (where the format's value curve turns down): QB 30, RB 25, 
 
 ## Packages
 
-A counterparty's tradeable items are everything they hold worth 150+, each scored by what the asking side wants: in rebuild mode firsts in the next two drafts score highest (projected early firsts higher still), then any first, players 25 and under, seconds. The builder takes items by preference until the target value is cleared, falls back to raw value if preference alone cannot get there, then trims any piece not needed to stay over the target. Ask = 115%, Target = 100%, Floor = 88% of the outgoing asset. The walk-away line names the most preferred piece in the target package.
+A counterparty's tradeable items are everything they hold worth 150+, each scored by what the asking side wants: in rebuild and retool mode firsts in the next two drafts score highest (projected early firsts higher still), then any first, players 25 and under, seconds. The builder searches every combination of up to four pieces from the sixteen most preferred items, keeps the ones that clear the target (3% slack under it) and picks the lowest cost: overshoot, plus twice any undershoot, minus a preference bonus for each piece worth at least a tenth of the target, plus a small per-piece penalty. It stops at two pieces when a two-piece answer exists. Nothing clears the target: the most valuable pieces go in.
 
-Counterparties in rebuild mode are teams at or above the playoff line, scored by record, firsts held and value of under-25 players. Contend mode flips every rule: counterparties are bottom-half teams, targets are their startable producers at the buyer's two weakest positions, and the buyer spends their own picks and youth.
+Sell deals (rebuild, retool): Ask = 115%, Target = 100%, Floor = 88% of the outgoing asset; a deal is dropped when even the Floor package cannot reach 97% of the floor. The walk-away line names the most preferred piece in the target package.
+
+Buy deals (contend, retool): the two weakest positions by this season's z, skipping any the roster already covers when healthy (two startable QBs in Superflex, two RBs, three WRs, one TE), so a weakness caused by missed games is not bought twice. Contend targets startable producers near or past the sell age on bottom-half teams and pays with picks and youth. Retool targets startable players young enough to be there when the window opens (value 1,500+, age at most one year under the position's sell age) on any team, surplus-heavy and pick-hungry teams first, and pays with picks other than the own first in the next draft plus youth outside the top-8 core. Variants read Open = 88%, Target = 100%, Ceiling = 115% of the incoming player; the walk-away line is the ceiling.
+
+Deals are ordered by the size of the asset, then by the quality of the return (preference per piece, need fit, firsts in the next two drafts), and capped at two per counterparty and four per asset.
 
 ## Trade board
 
-One HTML file. Your roster pinned left with SELL / HOLD tags, a tab per team (teams with drafted deals first), the deal rail between them with Ask / Target / Floor variants that highlight what you send (red) and receive (green) on both rosters and show the value return. Dark-first with a light palette for light-mode viewers. State (selected team, deal, variant) lives in `localStorage` only.
+One HTML file. Your roster pinned left with SELL / HOLD tags, a tab per team (teams with drafted deals first), the deal rail between them with Ask / Target / Floor (or Open / Target / Ceiling for a buy) variants that highlight what you send (red) and receive (green) on both rosters and show the value return. Dark-first with a light palette for light-mode viewers. State (selected team, deal, variant) lives in `localStorage` only.
 
 ## What it does not do
 

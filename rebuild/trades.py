@@ -3,7 +3,8 @@
 Rebuild mode sells production that will not survive the window (older startable players) to contenders for
 first-round picks in the next two drafts and for players under 25. Contend mode does the reverse: it spends
 far-out picks and non-producing youth on older producers at the weakest starting position. Retool sits between:
-sell the oldest producer, keep the picks, buy one young starter."""
+sell anything past its sell age, keep the own first in the next draft and the core, and spend surplus picks and
+non-core youth on one young starter at the weakest position."""
 from .grade import SELL_AGE
 from .metrics import TH
 
@@ -149,7 +150,7 @@ def build_package(items, target, max_pieces=4, exclude=(), slack=0.03):
             if total < floor:
                 continue
             over = (total - target) / target
-            cost = max(over, 0) * 1.0 + max(-over, 0) * 2.0 - 0.06 * sum(i["pref"] for i in combo) + 0.02 * k
+            cost = max(over, 0) * 1.0 + max(-over, 0) * 2.0 - 0.06 * sum(i["pref"] for i in combo if i["value"] >= 0.1 * target) + 0.02 * k
             if best_cost is None or cost < best_cost:
                 best, best_cost = list(combo), cost
         if best is not None and k >= 2:
@@ -160,11 +161,82 @@ def build_package(items, target, max_pieces=4, exclude=(), slack=0.03):
     return best, sum(i["value"] for i in best)
 
 
+def buy_counterparties(g, league, pos, mode):
+    """Teams to buy a player at `pos` from. Contend: bottom-half teams holding older producers.
+    Retool: any team with surplus at the position, pick-hungry teams first."""
+    n = g["n"]
+    out = []
+    for rid, t in g["teams"].items():
+        if rid == g["team"]["rid"]:
+            continue
+        needs = positional_need(g["rows"], rid)
+        if mode == "contend":
+            if t["rank"] <= n // 2:
+                continue
+            old_prod = sum(p["value"] for p in t["players"] if p["startable"] and (p["age"] or 0) >= SELL_AGE[p["pos"]] - 1)
+            score = t["rank"] * 300 + old_prod / 10
+        else:
+            surplus = sum(1 for p in t["players"] if p["pos"] == pos and p["startable"])
+            firsts = sum(t["firsts"].values())
+            score = surplus * 500 - firsts * 300 + (200 if pos not in needs[:2] else 0)
+        out.append((score, t, needs))
+    out.sort(key=lambda x: -x[0])
+    return [(t, needs) for _, t, needs in out]
+
+
+def buy_positions(g, me, league):
+    """The two weakest positions by this season's z, skipping any the roster already covers when healthy
+    (two startable QBs in Superflex, two RBs, three WRs, one TE): that weakness is availability, not talent."""
+    f = league.fmt
+    need_n = {"QB": (f.get("qb") or 1) + (f.get("sf") or 0), "RB": f.get("rb") or 2, "WR": f.get("wr") or 3, "TE": f.get("te") or 1}
+    have = {pos: sum(1 for p in me["players"] if p["pos"] == pos and p["startable"]) for pos in need_n}
+    ranked = positional_need(g["rows"], me["rid"])
+    return [pos for pos in ranked if have.get(pos, 0) < need_n[pos]][:2] or ranked[:2] or ["RB", "WR"]
+
+
+def buy_deals(g, league, me, mode, max_counterparties=6):
+    """Buy a starter at the two weakest positions. Contend buys older production with picks and youth;
+    retool buys a young starter (one who is still there when the window opens) with surplus picks and
+    non-core youth, keeping the own first in the next draft and every core asset."""
+    out = []
+    want = buy_positions(g, me, league)
+    my_items = tradeable(me, "rebuild", league)  # picks and youth, scored the way a rebuilder wants them
+    if mode == "retool":
+        own_next_first = {pk["key"] for pk in me["picks"] if pk["round"] == 1 and pk["own"] and pk["season"] == league.pick_seasons[0]}
+        core = {p["id"] for p in sorted((p for p in me["players"] if p["pos"] in TH), key=lambda p: -p["value"])[:8]}
+        my_items = [i for i in my_items if not (i["kind"] == "pick" and i["key"] in own_next_first) and not (i["kind"] == "player" and i["id"] in core)]
+    budget = sum(i["value"] for i in my_items)
+    for pos in want:
+        for t, _ in buy_counterparties(g, league, pos, mode)[:(max_counterparties if mode == "contend" else None)]:
+            if mode == "contend":
+                targets = sorted([p for p in t["players"] if p["pos"] == pos and p["startable"] and p["value"] >= MIN_SELL_VALUE
+                                  and (p["age"] or 0) >= SELL_AGE[pos] - 2], key=lambda p: -p["ppg"])[:1]
+            else:
+                targets = sorted([p for p in t["players"] if p["pos"] == pos and p["startable"] and p["value"] >= 1500
+                                  and (p["age"] or 99) <= SELL_AGE[pos] - 1 and p["value"] * ASK <= budget], key=lambda p: -p["value"])[:1]
+            for tp in targets:
+                if tp["value"] * ASK > budget:
+                    continue
+                vars_ = {}
+                for name, mult in (("Open", FLOOR), ("Target", TARGET), ("Ceiling", ASK)):
+                    pk, tot = build_package(my_items, tp["value"] * mult)
+                    vars_[name] = {"items": pk, "value": tot}
+                if vars_["Target"]["value"] < tp["value"] * TARGET * 0.97:
+                    continue
+                label = f"your weakest spot: {pos}" if mode == "contend" else f"young starter at {pos}, your weakest spot"
+                score = tp["ppg"] / 20 + 0.2 + (0.3 if mode == "retool" and (tp["age"] or 99) <= 25 else 0.0)
+                out.append({"counterparty": t["name"], "cp_rid": t["rid"], "title": f"Buy {tp['name']} from {t['name']} ({label})",
+                            "sends": None, "receives": [{"kind": "player", "id": tp["id"], "label": f"{tp['name']} ({pos}, {tp['age']})", "value": tp["value"]}],
+                            "vars": vars_, "walk": f"they want more than {int(tp['value'] * ASK):,} of your picks and youth",
+                            "need_fit": True, "score": score, "asset": tp["name"]})
+    return out
+
+
 def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=2):
     me = g["team"]
     out = []
-    cps = counterparties(g, league, mode)[:max_counterparties]
     if mode in ("rebuild", "retool"):
+        cps = counterparties(g, league, mode)[:max_counterparties]
         for sell in assets["sell"][:4]:
             for t, needs in cps:
                 items = tradeable(t, mode, league)
@@ -187,24 +259,8 @@ def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=2):
                             "sends": [{"kind": "player", "id": sell["id"], "label": f"{sell['name']} ({sell['pos']}, {sell['age']})", "value": sell["value"]}],
                             "vars": vars_, "walk": f"the {best['label']} is not in it, or the return falls under {int(sell['value'] * FLOOR):,}",
                             "need_fit": bool(fit), "score": score, "asset": sell["name"]})
-    else:
-        want = positional_need(g["rows"], me["rid"])[:2] or ["RB", "WR"]
-        my_items = tradeable(me, "rebuild", league)  # what I can spend: picks and youth, scored the way a rebuilder wants them
-        budget = sum(i["value"] for i in my_items)
-        for t, _ in cps:
-            for pos in want:
-                targets = sorted([p for p in t["players"] if p["pos"] == pos and p["startable"] and p["value"] >= MIN_SELL_VALUE and (p["age"] or 0) >= SELL_AGE[pos] - 2], key=lambda p: -p["ppg"])[:1]
-                for tp in targets:
-                    if tp["value"] * ASK > budget:
-                        continue
-                    vars_ = {}
-                    for name, mult in (("Floor", FLOOR), ("Target", TARGET), ("Ask", ASK)):
-                        pk, tot = build_package(my_items, tp["value"] * mult)
-                        vars_[name] = {"items": pk, "value": tot}
-                    out.append({"counterparty": t["name"], "cp_rid": t["rid"], "title": f"Buy {tp['name']} from {t['name']} (your weakest spot: {pos})",
-                                "sends": None, "receives": [{"kind": "player", "id": tp["id"], "label": f"{tp['name']} ({pos}, {tp['age']})", "value": tp["value"]}],
-                                "vars": vars_, "walk": f"they want more than {int(tp['value'] * ASK):,} of your picks and youth",
-                                "need_fit": True, "score": tp["ppg"] / 20 + 0.2, "asset": tp["name"]})
+    if mode in ("contend", "retool"):
+        out.extend(buy_deals(g, league, me, mode, max_counterparties))
     # biggest asset first, then the best counterparty for it; cap deals per counterparty so the board stays readable
     asset_value = {d["asset"]: sum(x["value"] for x in (d.get("sends") or d.get("receives"))) for d in out}
     out.sort(key=lambda d: (-asset_value[d["asset"]], -d["score"]))

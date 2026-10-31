@@ -1,6 +1,7 @@
 """The written brief (Markdown): the call, where the team stands, what wins the format, league history, the ledger, deals, what to expect."""
 import statistics as st
 
+from .trades import buy_positions
 from .metrics import TH, team_rows, zwithin
 
 
@@ -12,7 +13,7 @@ def num(x, d=2):
     return "-" if x is None else f"{x:+.{d}f}" if d else f"{x:,.0f}"
 
 
-def call_text(g, league, bm):
+def call_text(g, league, bm, assets=None):
     me = g["team"]
     mode = g["mode"]
     if mode == "rebuild":
@@ -20,7 +21,15 @@ def call_text(g, league, bm):
                 f"and players under 25, and plan on contending in {g['window']}.")
     if mode == "contend":
         return (f"The window is open now. Spend far-out picks and non-producing youth on an older producer at your weakest starting spot and hold everything that scores.")
-    return (f"Neither window is open. Sell the oldest producer while a contender still pays, keep the picks, and buy one young starter so the team is a contender in {g['window']}.")
+    weak = " or ".join(buy_positions(g, me, league)) or "the weakest spot"
+    nxt = league.pick_seasons[0]
+    own_first = any(pk["round"] == 1 and pk["own"] and pk["season"] == nxt for pk in me["picks"])
+    keep = f"Keep the producers and your own {nxt} first" if own_first else "Keep the producers"
+    if assets is not None and not assets["sell"]:
+        return (f"Neither window is open, and nothing on the roster is past its sell age. {keep}; "
+                f"spend the other picks on one young starter at {weak} so the team is a contender in {g['window']}.")
+    return (f"Neither window is open. Sell what is past its sell age while a contender still pays. {keep}, "
+            f"and buy one young starter at {weak} so the team is a contender in {g['window']}.")
 
 
 def lineage_table(bundles, chain, pdb, rid, league):
@@ -61,7 +70,7 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
     A("")
     A(f"## The call: {g['mode']}")
     A("")
-    A(call_text(g, league, bm))
+    A(call_text(g, league, bm, assets))
     A("")
     for r in g["reasons"]:
         A(f"- {r}")
@@ -75,7 +84,7 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
         A(f"| Points per week | {row['ppg']:.1f} | {sorted((-r['ppg'], r['rid']) for r in g['rows']).index((-row['ppg'], me['rid'])) + 1} | {pct.get('ppg', '-')} |")
         for m in ("QB", "RB", "WR", "TE"):
             A(f"| {m} points per week | {row[m]:.1f} (z {row.get('z_' + m, 0):+.2f}) | | {pct.get(m, '-')} |")
-        A(f"| Startable depth (QB/RB/WR/TE) | {row['depth']} ({row['depQB']}/{row['depRB']}/{row['depWR']}/{row['depTE']}) | {g['ledger_rank']['startable']} | {pct.get('depth', '-')} |")
+        A(f"| Startable depth, season average incl. missed weeks (QB/RB/WR/TE) | {row['depth']} ({row['depQB']}/{row['depRB']}/{row['depWR']}/{row['depTE']}) | {g['ledger_rank']['startable']} | {pct.get('depth', '-')} |")
         if row.get("starter_age"):
             A(f"| Starter age (weighted by starts) | {row['starter_age']:.1f} | | {pct.get('starter_age', '-')} (higher = older) |")
         A(f"| Lineup efficiency | {row['eff'] * 100:.0f}% | | {pct.get('eff', '-')} |")
@@ -179,6 +188,7 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
     A("")
     if not deals:
         A("No deal clears the floor with any counterparty right now. Re-run after the next waiver cycle or widen the counterparties.")
+        A("")
     for i, d in enumerate(deals, 1):
         fixed = d.get("sends") or d.get("receives")
         A(f"### {i}. {d['title']}")
@@ -188,7 +198,7 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
         A("| Variant | Package | Value | Return |")
         A("|-|-|-|-|")
         base = sum(x["value"] for x in fixed)
-        for name in ("Ask", "Target", "Floor"):
+        for name in d["vars"]:
             v = d["vars"].get(name)
             if not v:
                 continue

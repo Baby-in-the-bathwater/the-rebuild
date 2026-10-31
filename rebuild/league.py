@@ -79,11 +79,13 @@ class League:
 
         self.user_name = {u["user_id"]: (u.get("display_name") or u.get("username") or f"User {u['user_id']}") for u in self.users}
         self.user_handle = {u["user_id"]: (u.get("username") or "") for u in self.users}
+        # Sleeper keeps the custom team name on the USER record (users[].metadata.team_name), not the roster
+        self.user_team = {u["user_id"]: ((u.get("metadata") or {}).get("team_name") or "").strip() for u in self.users}
         self.team_name = {}
         self.owner_name = {}
         for r in self.rosters:
             rid = r["roster_id"]
-            meta = (r.get("metadata") or {}).get("team_name")
+            meta = (r.get("metadata") or {}).get("team_name") or self.user_team.get(r.get("owner_id"))
             owner = self.user_name.get(r.get("owner_id"))
             self.team_name[rid] = meta or owner or f"Team {rid}"
             self.owner_name[rid] = owner or "(orphan)"
@@ -153,6 +155,9 @@ class League:
 
     def find_team(self, query):
         """Resolve a team name, display name, username, or roster id to a roster id."""
+        def fold(x):
+            # case-fold and normalise curly quotes so "We’re So Back" matches "we're so back"
+            return (x or "").replace("\u2019", "'").replace("\u2018", "'").replace("\u201c", '"').replace("\u201d", '"').strip().lower()
         q = (query or "").strip()
         if q.isdigit() and int(q) in self.team_name and len(q) <= 2:
             return int(q)
@@ -161,8 +166,8 @@ class League:
             r = self.roster(rid)
             for cand in (self.team_name[rid], self.owner_name[rid], self.user_handle.get(r.get("owner_id"), "")):
                 if cand:
-                    names.setdefault(cand.lower(), rid)
-        ql = q.lower()
+                    names.setdefault(fold(cand), rid)
+        ql = fold(q)
         if ql in names:
             return names[ql]
         subs = {n: rid for n, rid in names.items() if ql and ql in n}

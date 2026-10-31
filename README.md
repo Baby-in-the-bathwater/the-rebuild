@@ -32,11 +32,11 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 1. **Pulls the league** from Sleeper's public API: settings, rosters, users, traded picks, every week's lineups and points, this season's trades. No login, no API key.
 2. **Prices every asset** with the open DynastyProcess values feed (Superflex or 1QB column chosen from the league settings). Picks are priced by the original team's projected slot from current standings.
 3. **Walks the league's own history** through `previous_league_id`: who won each season, what carried them, and how this roster slot finished under each manager.
-4. **Loads the format benchmark**: what wins in leagues like this one. A shipped benchmark ships for 12-team Superflex half-PPR dynasty (251 leagues, 1,100+ league-seasons back to 2019). Any other format gets crawled on first run (`--pool`, 10 to 20 minutes) and saved for next time.
+4. **Loads the format benchmark**: what wins in leagues like this one. Two benchmarks ship: 12-team Superflex half-PPR dynasty (251 leagues, 1,100+ league-seasons back to 2019) and the same format with TE premium (166 leagues, 580 league-seasons). Any other format gets crawled on first run (about 4 minutes for 160 leagues; up to 20 for a big family) and saved for next time.
 5. **Grades the roster** on the metrics that predict winning: positional points, startable depth, lineup efficiency, starter age, pick capital. Each one is a within-league z-score placed on the pool, so a percentile reads the same in any league of the format.
 6. **Makes the call** and sets the window: contend now, retool for next season, or rebuild for two to three seasons out.
 7. **Writes the ledger**: sell (production that will not survive the window), hold (young core), keep (cheap youth).
-8. **Drafts the deals**: for each sell asset and each contender with pick capital, an Ask / Target / Floor package built from what that team actually holds, scored by what a rebuilder should want (firsts in the next two drafts, players under 25). Contend mode reverses it.
+8. **Drafts the deals**. Rebuild: for each sell asset and each contender with pick capital, an Ask / Target / Floor package built from what that team actually holds, scored by what a rebuilder should want (firsts in the next two drafts, players under 25). Contend: buy an older producer at the weakest starting spot with far-out picks and non-producing youth. Retool: sell anything past its sell age the same way, and buy one young starter at the weakest uncovered position with surplus picks and non-core youth, keeping the own first in the next draft; buy packages read Open / Target / Ceiling (what you pay).
 9. **Writes it up**: `brief.md` (the call, standing, what wins, history, ledger, deals, what to expect, pick hit rates) and `trade-board.html` (Sleeper-style, all rosters, every deal highlighted on both sides with the value return).
 
 ## Three ways to run it
@@ -51,7 +51,7 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 
 ```
 --league ID          Sleeper league id (required)
---team NAME          team name, manager display name, username, or roster id (required)
+--team NAME          team name (as Sleeper shows it), manager display name, username, or roster id (required)
 --out DIR            output folder (default out/<league id>)
 --pool               crawl a fresh benchmark pool for this format even if a shipped one matches
 --pool-target N      leagues to find (default 150)
@@ -67,7 +67,7 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 
 `benchmarks/*.json` hold aggregate tables only (no manager names, no rosters): positional regression coefficients by season, champion profiles, depth and age buckets, rebuild trajectories (bottom-3 teams followed for three seasons, split by what they did), and rookie pick hit rates by slot and position. The matching rule is the format family: team count, dynasty, Superflex or 1QB, reception scoring, TE premium or not.
 
-Building one yourself: run with `--pool` on any league of the format. The crawl snowballs from that league's managers through their other leagues, keeps the ones in the family, walks each one's history, and writes `benchmark-<format>.json` into the output folder. Copy it into `benchmarks/` to ship it.
+Shipped: `dynasty-12team-sf-halfppr` and `dynasty-12team-sf-halfppr-tep`. Building one yourself: run with `--pool` on any league of the format. The crawl snowballs from that league's managers through their other leagues, keeps the ones in the family, walks each one's history, and writes `benchmark-<format>.json` into the output folder. Copy it into `benchmarks/` to ship it.
 
 ## Method notes
 
