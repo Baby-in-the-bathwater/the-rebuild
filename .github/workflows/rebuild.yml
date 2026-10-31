@@ -1,7 +1,7 @@
 name: Run the rebuild
 
 # No install needed: Actions tab -> "Run the rebuild" -> Run workflow -> enter the league id and team name.
-# The brief, the trade board and the data land in a downloadable artifact on the run page.
+# The brief (markdown and PDF), the trade board and the data land in a downloadable artifact on the run page.
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Run
         run: |
-          python -m rebuild --league "${{ inputs.league_id }}" --team "${{ inputs.team }}" --out out ${{ inputs.pool && '--pool' || '' }}
+          python -m rebuild --league "${{ inputs.league_id }}" --team "${{ inputs.team }}" --out out --pdf ${{ inputs.pool && '--pool' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: rebuild-${{ inputs.league_id }}

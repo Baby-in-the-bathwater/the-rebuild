@@ -84,7 +84,9 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
         A(f"| Points per week | {row['ppg']:.1f} | {sorted((-r['ppg'], r['rid']) for r in g['rows']).index((-row['ppg'], me['rid'])) + 1} | {pct.get('ppg', '-')} |")
         for m in ("QB", "RB", "WR", "TE"):
             A(f"| {m} points per week | {row[m]:.1f} (z {row.get('z_' + m, 0):+.2f}) | | {pct.get(m, '-')} |")
-        A(f"| Startable depth, season average incl. missed weeks (QB/RB/WR/TE) | {row['depth']} ({row['depQB']}/{row['depRB']}/{row['depWR']}/{row['depTE']}) | {g['ledger_rank']['startable']} | {pct.get('depth', '-')} |")
+        A(f"| Startable depth, produced for this team so far (QB/RB/WR/TE) | {row['depth']} ({row['depQB']}/{row['depRB']}/{row['depWR']}/{row['depTE']}) | {g['ledger_rank']['startable']} | {pct.get('depth', '-')} |")
+        now = {pos: sum(1 for p in me["players"] if p["pos"] == pos and p["startable"]) for pos in ("QB", "RB", "WR", "TE")}
+        A(f"| Startable on the roster today, by season ppg wherever they played (QB/RB/WR/TE) | {sum(now.values())} ({now['QB']}/{now['RB']}/{now['WR']}/{now['TE']}) | | |")
         if row.get("starter_age"):
             A(f"| Starter age (weighted by starts) | {row['starter_age']:.1f} | | {pct.get('starter_age', '-')} (higher = older) |")
         A(f"| Lineup efficiency | {row['eff'] * 100:.0f}% | | {pct.get('eff', '-')} |")
@@ -96,7 +98,9 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
         A(f"| Core age (top-8 assets) | {me['core_age']:.1f} | {g['ledger_rank']['core_age']} (1 = youngest) | |")
     A(f"| First-round picks held | " + ", ".join(f"{s}: {c}" for s, c in me["firsts"].items()) + " | | |")
     A("")
-    A("Pool percentile is this team's within-league z-score placed against every team-season in the benchmark pool, so it reads the same in any league of this format.")
+    A("Pool percentile is this team's within-league z-score placed against every team-season in the benchmark pool, so it reads the same in any league of this format. "
+      "The first depth line is what this roster has actually produced, week by week, including missed weeks as zeros; a player acquired mid-season counts from the week he arrived, "
+      "which is how the pool is measured. The second line is the roster as it stands today, each player scored on his season average over games played, wherever he played.")
     A("")
     # what wins
     A("## What wins this format")

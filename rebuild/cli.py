@@ -12,6 +12,7 @@ import time
 import webbrowser
 
 from . import benchmarks as bmod
+from . import pdf as pdfmod
 from . import board, report
 from .crawl import crawl_lineages, discover_pool, load_bundles, walk_lineage
 from .grade import grade
@@ -36,6 +37,7 @@ def main(argv=None):
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--no-history", action="store_true", help="skip the league's own previous-season walk")
     ap.add_argument("--refresh-values", action="store_true", help="re-download the values feed even if cached today")
+    ap.add_argument("--pdf", action="store_true", help="also render brief.pdf (needs Chrome, Chromium or Edge installed)")
     ap.add_argument("--open", action="store_true", help="open the trade board in the browser when done")
     a = ap.parse_args(argv)
 
@@ -103,6 +105,10 @@ def main(argv=None):
     data = board.board_data(league, values, g, assets, ds, ct)
     html = board.render(data, os.path.join(out, "trade-board.html"))
     md = report.write(os.path.join(out, "brief.md"), league, values, g, assets, ds, bm, lineage, shipped_note)
+    pdf_path = None
+    if a.pdf:
+        pdf_path, why = pdfmod.render(md, os.path.join(out, "brief.pdf"))
+        log(f"pdf: {pdf_path}" if pdf_path else f"pdf skipped: {why}")
     with open(os.path.join(out, "board-data.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, indent=0)
     summary = {"league": league.lg.get("name"), "league_id": league.id, "season": league.season, "week": league.week, "team": g["team"]["name"], "roster_id": rid,
@@ -118,7 +124,7 @@ def main(argv=None):
     print(f"\n{g['team']['name']}: {g['mode'].upper()} (contend in {g['window']})")
     for r in g["reasons"]:
         print(f"  - {r}")
-    print(f"\n  brief        {md}\n  trade board  {html}\n  summary      {os.path.join(out, 'summary.json')}")
+    print(f"\n  brief        {md}" + (f"\n  brief pdf    {pdf_path}" if pdf_path else "") + f"\n  trade board  {html}\n  summary      {os.path.join(out, 'summary.json')}")
     if a.open:
         webbrowser.open("file://" + os.path.abspath(html))
     return 0

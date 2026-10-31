@@ -37,7 +37,7 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 6. **Makes the call** and sets the window: contend now, retool for next season, or rebuild for two to three seasons out.
 7. **Writes the ledger**: sell (production that will not survive the window), hold (young core), keep (cheap youth).
 8. **Drafts the deals**. Rebuild: for each sell asset and each contender with pick capital, an Ask / Target / Floor package built from what that team actually holds, scored by what a rebuilder should want (firsts in the next two drafts, players under 25). Contend: buy an older producer at the weakest starting spot with far-out picks and non-producing youth. Retool: sell anything past its sell age the same way, and buy one young starter at the weakest uncovered position with surplus picks and non-core youth, keeping the own first in the next draft; buy packages read Open / Target / Ceiling (what you pay).
-9. **Writes it up**: `brief.md` (the call, standing, what wins, history, ledger, deals, what to expect, pick hit rates) and `trade-board.html` (Sleeper-style, all rosters, every deal highlighted on both sides with the value return).
+9. **Writes it up**: `brief.md` (the call, standing, what wins, history, ledger, deals, what to expect, pick hit rates; `--pdf` adds `brief.pdf`) and `trade-board.html` (Sleeper-style, all rosters, every deal highlighted on both sides with the value return).
 
 ## Three ways to run it
 
@@ -60,6 +60,7 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 --no-history         skip the league's own previous-season walk
 --refresh-values     re-download the values feed
 --cache-dir DIR      where pulls and crawled seasons are cached (default ./cache)
+--pdf                also render brief.pdf (needs Chrome, Chromium or Edge installed; the Action does this)
 --open               open the trade board when done
 ```
 
