@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Sleeper-style trade page. Your roster pinned left, chosen counterparty right, deal rail between them on desktop and above the panels on a phone. Dark-first, Sleeper position hues. */
+:root{
+  --bg:#0f1420; --panel:#171d2c; --panel2:#1e2536; --line:#2a3245; --fg:#e8ecf4; --muted:#8e98ad; --accent:#f5c542;
+  --qb:#f8296d; --rb:#00ceb8; --wr:#58a7ff; --te:#ffae58; --k:#b1b7c6; --def:#bd66ff; --pick:#c9d1e0;
+  --send:#ff6b6b; --recv:#4cd97b; --glow:0 0 0 2px var(--accent);
+  --display:"Barlow Condensed","Arial Narrow",Impact,sans-serif; --body:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){ --bg:#f3f4f8; --panel:#ffffff; --panel2:#eef0f6; --line:#d8dce6; --fg:#141a28; --muted:#5d6678; --accent:#b8860b; --qb:#d81b5c; --rb:#0e9f8f; --wr:#2a6fd6; --te:#d97a1a; --k:#6b7385; --def:#8e3fd9; --pick:#3b4356; --send:#c93b3b; --recv:#1f8a4c; color-scheme:light } }
+:root[data-theme="light"]{ --bg:#f3f4f8; --panel:#ffffff; --panel2:#eef0f6; --line:#d8dce6; --fg:#141a28; --muted:#5d6678; --accent:#b8860b; --qb:#d81b5c; --rb:#0e9f8f; --wr:#2a6fd6; --te:#d97a1a; --k:#6b7385; --def:#8e3fd9; --pick:#3b4356; --send:#c93b3b; --recv:#1f8a4c; color-scheme:light }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.35;padding-block:0 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.01em}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;padding:18px 0 12px;border-bottom:1px solid var(--line)}
+.top h1{font-size:30px;line-height:1;text-transform:uppercase}
+.top .sub{color:var(--muted);font-size:13px}
+.call{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:4px;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:#1a1400;vertical-align:middle}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;padding:12px 0}
+.tab{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:999px;padding:6px 12px;font:600 13px var(--body);cursor:pointer}
+.tab[aria-selected="true"]{background:var(--accent);color:#1a1400;border-color:var(--accent)}
+.tab .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--recv);margin-left:6px;vertical-align:1px}
+.tab[aria-selected="true"] .dot{background:#1a1400}
+.tab:focus-visible,.deal:focus-visible,.var:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.board{display:grid;grid-template-columns:minmax(0,1fr) 300px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:980px){.board{grid-template-columns:1fr}.rail{order:-1}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:0;overflow:hidden}
+.phead{padding:12px 14px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.phead h2{font-size:24px;text-transform:uppercase;line-height:1}
+.phead .meta{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--muted);font-size:12px;margin-top:4px;font-variant-numeric:tabular-nums}
+.phead .meta b{color:var(--fg);font-weight:600}
+.group{padding:8px 10px 2px}
+.gh{display:flex;align-items:center;gap:8px;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 4px 4px}
+.gh .bar{height:3px;flex:1;border-radius:2px;opacity:.85}
+.row{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 56px;gap:0 8px;align-items:center;padding:5px 4px;border-radius:6px;font-variant-numeric:tabular-nums}
+.row + .row{border-top:1px solid var(--line)}
+.row.hl{box-shadow:var(--glow);background:color-mix(in srgb,var(--accent) 12%,transparent);border-top-color:transparent}
+.row.hl.send{box-shadow:0 0 0 2px var(--send);background:color-mix(in srgb,var(--send) 14%,transparent)}
+.row.hl.recv{box-shadow:0 0 0 2px var(--recv);background:color-mix(in srgb,var(--recv) 14%,transparent)}
+.row.sell .nm::after{content:"SELL";font:700 10px var(--display);letter-spacing:.05em;color:var(--send);margin-left:6px}
+.row.hold .nm::after{content:"HOLD";font:700 10px var(--display);letter-spacing:.05em;color:var(--accent);margin-left:6px}
+.badge{font:700 11px var(--display);letter-spacing:.06em;color:#0b0e14;border-radius:4px;padding:3px 0;text-align:center}
+.nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.nm small{color:var(--muted);font-weight:400;margin-left:5px}
+.tag{display:inline-block;font:700 10px var(--display);letter-spacing:.05em;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:1px}
+.tag.ir{background:var(--send);color:#fff}.tag.st{background:var(--line);color:var(--fg)}.tag.tx{background:var(--def);color:#fff}
+.num{color:var(--muted);font-size:12px;text-align:right}
+.num.val{font-family:var(--mono);color:var(--fg);font-size:12px}
+.num.ppg.good{color:var(--recv);font-weight:600}
+.cols{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 56px;gap:0 8px;padding:8px 14px 0;font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cols span:nth-child(n+3){text-align:right}
+.picks{padding:10px 10px 12px}
+.season{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;align-items:start;padding:5px 4px}
+.season + .season{border-top:1px solid var(--line)}
+.season .yr{font:700 16px var(--display);color:var(--muted);padding-top:3px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:4px 7px;font-size:12px;background:var(--panel2);font-variant-numeric:tabular-nums}
+.chip .r{font:700 11px var(--display);padding:1px 5px;border-radius:3px;color:#0b0e14}
+.chip .r1{background:var(--accent)}.chip .r2{background:var(--pick)}.chip .r3,.chip .r4,.chip .r5{background:var(--muted)}
+.chip small{color:var(--muted)}
+.chip .v{font-family:var(--mono);font-size:11px;color:var(--fg)}
+.chip.hl{box-shadow:var(--glow)}.chip.hl.recv{box-shadow:0 0 0 2px var(--recv);background:color-mix(in srgb,var(--recv) 14%,var(--panel2))}.chip.hl.send{box-shadow:0 0 0 2px var(--send);background:color-mix(in srgb,var(--send) 14%,var(--panel2))}
+.none{color:var(--muted);font-size:12px;padding-top:4px}
+.rail{display:flex;flex-direction:column;gap:10px;min-width:0}
+.rail .panel{padding:12px}
+.rail h3{font-size:18px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em}
+.deals{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.deal{appearance:none;text-align:left;border:1px solid var(--line);background:var(--panel2);color:var(--fg);border-radius:8px;padding:8px 10px;font:500 13px var(--body);cursor:pointer}
+.deal[aria-selected="true"]{border-color:var(--accent)}
+.deal small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.vars{display:flex;gap:6px;margin-top:10px}
+.var{flex:1;appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--fg);border-radius:6px;padding:6px 0;font:700 12px var(--display);letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.var[aria-selected="true"]{background:var(--accent);color:#1a1400;border-color:var(--accent)}
+.side{margin-top:10px}
+.side .lbl{font:700 11px var(--display);letter-spacing:.08em;text-transform:uppercase;display:flex;justify-content:space-between}
+.side .lbl.send{color:var(--send)}.side .lbl.recv{color:var(--recv)}
+.side ul{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:3px}
+.side li{display:flex;justify-content:space-between;gap:8px;font-size:13px;background:var(--panel2);border-radius:5px;padding:4px 8px;font-variant-numeric:tabular-nums}
+.side li span:last-child{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.tot{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.tot .big{font:700 26px var(--display)}
+.tot .big.good{color:var(--recv)}.tot .big.bad{color:var(--send)}
+.walk{margin-top:8px;font-size:12px;color:var(--muted)}
+.walk b{color:var(--fg)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;color:var(--muted);font-size:12px;padding:10px 0 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px}
+.note{color:var(--muted);font-size:12px;margin-top:10px}
+.summary{margin:12px 0 0;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;font-size:13px}
+.summary b{color:var(--accent)}
+.summary ul{margin:6px 0 0;padding-left:18px;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.row,.chip{transition:box-shadow .15s,background .15s}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1 id="h1"></h1><div class="sub" id="sub"></div></div>
+  <div class="legend"><span><i style="background:var(--qb)"></i>QB</span><span><i style="background:var(--rb)"></i>RB</span><span><i style="background:var(--wr)"></i>WR</span><span><i style="background:var(--te)"></i>TE</span><span><i style="background:var(--def)"></i>DEF</span><span><i style="background:var(--send)"></i>you send</span><span><i style="background:var(--recv)"></i>you receive</span></div>
+</header>
+<div class="summary" id="summary"></div>
+<div class="tabs" id="tabs" role="tablist" aria-label="Counterparty"></div>
+<div class="board">
+  <section class="panel" id="left" aria-label="Your roster"></section>
+  <aside class="rail" id="rail"></aside>
+  <section class="panel" id="right" aria-label="Counterparty roster"></section>
+</div>
+<p class="note" id="note"></p>
+
+<script>
+const DATA = /*__DATA__*/null;
+const ME = DATA.me_rid;
+const T = Object.fromEntries(DATA.teams.map(t => [t.rid, t]));
+const me = T[ME];
+const fmt = n => (n || 0).toLocaleString("en-US");
+const POS = ["QB", "RB", "WR", "TE", "K", "DEF"];
+const PC = {QB: "var(--qb)", RB: "var(--rb)", WR: "var(--wr)", TE: "var(--te)", K: "var(--k)", DEF: "var(--def)"};
+const ord = n => n + (["th","st","nd","rd"][(n%10>3||[11,12,13].includes(n%100))?0:n%10]);
+const pad = s => "1." + String(s).padStart(2, "0");
+const SEASONS = DATA.pick_seasons;
+const dealsFor = rid => DATA.deals.filter(d => d.cp_rid === rid);
+const withDeals = [...new Set(DATA.deals.map(d => d.cp_rid))];
+const others = [...withDeals, ...DATA.teams.map(t => t.rid).filter(r => r !== ME && !withDeals.includes(r))];
+
+let sel = {team: others[0], deal: 0, v: null};
+try { const s = JSON.parse(localStorage.getItem("rebuild-board-" + DATA.league_id) || "null"); if (s && T[s.team] && s.team !== ME) sel = s; } catch (e) {}
+const save = () => { try { localStorage.setItem("rebuild-board-" + DATA.league_id, JSON.stringify(sel)); } catch (e) {} };
+
+function panel(team, hl, isMe) {
+  const h = [];
+  h.push(`<div class="phead"><h2>${team.name}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span><span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span><span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(team.player_value)}</b></span><span>picks <b>${fmt(team.pick_value)}</b></span></div></div>`);
+  h.push(`<div class="cols"><span>Pos</span><span>Player</span><span>Team</span><span>Age</span><span>PPG</span><span>Value</span></div>`);
+  for (const pos of POS) {
+    const ps = team.players.filter(p => p.pos === pos);
+    if (!ps.length) continue;
+    h.push(`<div class="group"><div class="gh">${pos}<span class="bar" style="background:${PC[pos]}"></span><span>${ps.length}</span></div>`);
+    for (const p of ps) {
+      const m = hl.players[p.id];
+      const cls = isMe && DATA.ledger[p.id] ? " " + DATA.ledger[p.id] : "";
+      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${p.id}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${p.name}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${p.inj}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}</span><span class="num">${p.team}</span><span class="num">${p.age ?? ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}</span><span class="num val">${p.value ? fmt(p.value) : "–"}</span></div>`);
+    }
+    h.push(`</div>`);
+  }
+  h.push(`<div class="picks"><div class="gh">Draft picks<span class="bar" style="background:var(--pick)"></span><span>${fmt(team.pick_value)}</span></div>`);
+  for (const yr of SEASONS) {
+    const ps = team.picks.filter(p => p.season === yr);
+    h.push(`<div class="season"><div class="yr">${yr}</div><div class="chips">`);
+    if (!ps.length) h.push(`<span class="none">none</span>`);
+    for (const p of ps) {
+      const m = hl.picks[p.key];
+      h.push(`<span class="chip${m ? " hl " + m : ""}"><span class="r r${p.round}">R${p.round}</span>${p.own ? "own" : "via " + p.orig}${p.proj_slot && p.round === 1 ? `<small>${pad(p.proj_slot)}</small>` : ""}<span class="v">${fmt(p.value)}</span></span>`);
+    }
+    h.push(`</div></div>`);
+  }
+  h.push(`</div>`);
+  return h.join("");
+}
+
+function render() {
+  const other = T[sel.team];
+  document.getElementById("h1").innerHTML = `${DATA.league} Trade Board <span class="call">${DATA.mode}</span>`;
+  document.getElementById("sub").textContent = `${DATA.season} · week ${DATA.week} · values as of ${DATA.asof} · ${me.name} vs ${other.name}`;
+  document.getElementById("summary").innerHTML = `<b>The call: ${DATA.mode}.</b> ${DATA.call_text}<ul>${DATA.reasons.map(r => `<li>${r}</li>`).join("")}</ul>`;
+  document.getElementById("note").textContent = DATA.note;
+  const tabs = document.getElementById("tabs");
+  tabs.innerHTML = others.map(r => `<button class="tab" role="tab" aria-selected="${r === sel.team}" data-team="${r}">${T[r].name}${withDeals.includes(r) ? '<span class="dot"></span>' : ""}</button>`).join("");
+  tabs.querySelectorAll(".tab").forEach(b => b.onclick = () => { sel = {team: +b.dataset.team, deal: 0, v: null}; save(); render(); });
+
+  const deals = dealsFor(other.rid);
+  const deal = deals[sel.deal] || null;
+  const vnames = deal ? Object.keys(deal.vars) : [];
+  const v = deal ? (vnames.includes(sel.v) ? sel.v : (vnames.includes("Target") ? "Target" : vnames[0])) : null;
+  const hl = {players: {}, picks: {}};
+  let sendItems = [], recvItems = [];
+  if (deal) {
+    const varItems = deal.vars[v].items;
+    if (deal.fixed_side === "sends") { sendItems = deal.fixed; recvItems = varItems; } else { recvItems = deal.fixed; sendItems = varItems; }
+    for (const it of sendItems) if (it.kind === "player") hl.players[it.id] = "send"; else hl.picks[it.key] = "send";
+    for (const it of recvItems) if (it.kind === "player") hl.players[it.id] = "recv"; else hl.picks[it.key] = "recv";
+  }
+  document.getElementById("left").innerHTML = panel(me, hl, true);
+  document.getElementById("right").innerHTML = panel(other, hl, false);
+
+  const rail = document.getElementById("rail");
+  if (!deal) { rail.innerHTML = `<div class="panel"><h3>No deal drafted</h3><p class="note">Nothing drafted with ${other.name}: ${DATA.mode === "contend" ? "no older producer at your weak spots" : "not a contender with pick capital, or nothing on your sell list fits"}. Rosters shown for reference.</p></div>`; return; }
+  const sOut = sendItems.reduce((a, b) => a + b.value, 0), sIn = recvItems.reduce((a, b) => a + b.value, 0);
+  const pct = sOut ? Math.round(sIn / sOut * 100) : 0;
+  rail.innerHTML = `<div class="panel"><h3>Deals with ${other.name}</h3><div class="deals">${deals.map((d, i) => `<button class="deal" aria-selected="${i === sel.deal}" data-i="${i}">${d.title}<small>${d.fixed_side === "sends" ? d.fixed.map(x => x.label).join(", ") + " out" : d.fixed.map(x => x.label).join(", ") + " in"}</small></button>`).join("")}</div>
+    <div class="vars">${vnames.map(n => `<button class="var" aria-selected="${n === v}" data-v="${n}">${n}</button>`).join("")}</div>
+    <div class="side"><div class="lbl send"><span>You send</span><span>${fmt(sOut)}</span></div><ul>${sendItems.map(i => `<li><span>${i.label}</span><span>${fmt(i.value)}</span></li>`).join("")}</ul></div>
+    <div class="side"><div class="lbl recv"><span>You receive</span><span>${fmt(sIn)}</span></div><ul>${recvItems.map(i => `<li><span>${i.label}</span><span>${fmt(i.value)}</span></li>`).join("")}</ul></div>
+    <div class="tot"><span>Return on what you send</span><span class="big ${pct >= 100 ? "good" : (pct < 85 ? "bad" : "")}">${pct}%</span></div>
+    <div class="walk"><b>Walk away if</b> ${deal.walk}.</div></div>`;
+  rail.querySelectorAll(".deal").forEach(b => b.onclick = () => { sel.deal = +b.dataset.i; sel.v = null; save(); render(); });
+  rail.querySelectorAll(".var").forEach(b => b.onclick = () => { sel.v = b.dataset.v; save(); render(); });
+  sel.v = v;
+}
+render();
+</script>
+</body>
+</html>

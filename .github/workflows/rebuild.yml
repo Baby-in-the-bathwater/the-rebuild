@@ -1,0 +1,37 @@
+name: Run the rebuild
+
+# No install needed: Actions tab -> "Run the rebuild" -> Run workflow -> enter the league id and team name.
+# The brief, the trade board and the data land in a downloadable artifact on the run page.
+
+on:
+  workflow_dispatch:
+    inputs:
+      league_id:
+        description: "Sleeper league id (the number in the league URL)"
+        required: true
+      team:
+        description: "Team name, manager display name, username, or roster id"
+        required: true
+      pool:
+        description: "Crawl a fresh benchmark pool for this format (slow, 10-20 min) instead of using the shipped one"
+        type: boolean
+        default: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run
+        run: |
+          python -m rebuild --league "${{ inputs.league_id }}" --team "${{ inputs.team }}" --out out ${{ inputs.pool && '--pool' || '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rebuild-${{ inputs.league_id }}
+          path: out/
+          retention-days: 30
