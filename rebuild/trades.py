@@ -250,12 +250,12 @@ def buy_deals(g, league, me, mode, max_counterparties=6):
     return out
 
 
-def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=2):
+def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=None, deals_per_asset=4):
     me = g["team"]
     out = []
     if mode in ("rebuild", "retool"):
         cps = counterparties(g, league, mode)[:max_counterparties]
-        for sell in assets["sell"][:4]:
+        for sell in assets["sell"]:
             for t, needs in cps:
                 items = tradeable(t, mode, league)
                 if sum(i["value"] for i in items) < sell["value"] * FLOOR:
@@ -279,12 +279,13 @@ def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=2):
                             "need_fit": bool(fit), "score": score, "asset": sell["name"]})
     if mode in ("contend", "retool"):
         out.extend(buy_deals(g, league, me, mode, max_counterparties))
-    # biggest asset first, then the best counterparty for it; cap deals per counterparty so the board stays readable
+    # biggest asset first, then the best counterparty for it. Every sell asset gets its deals; the per-asset cap keeps
+    # one player from flooding the list, and deals_per_cp (off by default) can cap how many land on one team.
     asset_value = {d["asset"]: sum(x["value"] for x in (d.get("sends") or d.get("receives"))) for d in out}
     out.sort(key=lambda d: (-asset_value[d["asset"]], -d["score"]))
     kept, per_cp, per_asset = [], {}, {}
     for d in out:
-        if per_cp.get(d["counterparty"], 0) >= deals_per_cp or per_asset.get(d["asset"], 0) >= 4:
+        if (deals_per_cp and per_cp.get(d["counterparty"], 0) >= deals_per_cp) or per_asset.get(d["asset"], 0) >= deals_per_asset:
             continue
         per_cp[d["counterparty"]] = per_cp.get(d["counterparty"], 0) + 1
         per_asset[d["asset"]] = per_asset.get(d["asset"], 0) + 1

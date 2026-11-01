@@ -74,7 +74,7 @@ Sell deals (rebuild, retool): Ask = 115%, Target = 100%, Floor = 88% of the outg
 
 Buy deals (contend, retool): the two weakest positions by this season's z, skipping any the roster already covers when healthy (two startable QBs in Superflex, two RBs, three WRs, one TE), so a weakness caused by missed games is not bought twice. Contend targets startable producers near or past the sell age on bottom-half teams and pays with picks and youth. Retool targets startable players young enough to be there when the window opens (value 1,500+, age at most one year under the position's sell age) on any team, surplus-heavy and pick-hungry teams first, and pays with picks other than the own first in the next draft plus youth outside the top-8 core. Variants read Open = 88%, Target = 100%, Ceiling = 115% of the incoming player; the walk-away line is the ceiling.
 
-Deals are ordered by the size of the asset, then by the quality of the return (preference per piece, need fit, firsts in the next two drafts), and capped at two per counterparty and four per asset.
+Deals are ordered by the size of the asset, then by the quality of the return (preference per piece, need fit, firsts in the next two drafts), and capped at four per asset; every player on the sell list gets its deals (no per-counterparty cap).
 
 ## Trade board
 
