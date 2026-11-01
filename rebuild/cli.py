@@ -78,7 +78,19 @@ def main(argv=None):
             log(f"benchmark: shipped {bm['label']} ({bm['team_seasons']} team-seasons)")
     if bm is None:
         log(f"no shipped benchmark for {fmt_key(league.fmt)}; crawling a pool (cap {a.crawl_seconds}s, target {a.pool_target} leagues)")
-        pool = discover_pool(api, league, target=a.pool_target, seconds=a.crawl_seconds, threads=a.threads, log=log)
+        # discovery is the slow, uncached part of a crawl: keep the found pool per format for a day so a rerun skips it
+        pool_dir = os.path.join(a.cache_dir, "pools")
+        os.makedirs(pool_dir, exist_ok=True)
+        pool_file = os.path.join(pool_dir, f"{fmt_key(league.fmt)}.json")
+        pool = None
+        if os.path.exists(pool_file) and time.time() - os.path.getmtime(pool_file) < 86400:
+            with open(pool_file, encoding="utf-8") as f:
+                pool = json.load(f)
+            log(f"pool: {len(pool)} leagues of this format found earlier today (delete {os.path.basename(pool_file)} to rediscover)")
+        if pool is None:
+            pool = discover_pool(api, league, target=a.pool_target, seconds=a.crawl_seconds, threads=a.threads, log=log)
+            with open(pool_file, "w", encoding="utf-8") as f:
+                json.dump(pool, f)
         roots = list(pool) + [league.id]
         lineages = crawl_lineages(api, a.cache_dir, roots, threads=a.threads, state_week=sw, state_season=ss, log=log)
         ids = [lid for ch in lineages.values() for lid in ch]

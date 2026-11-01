@@ -41,6 +41,10 @@ def team_assets(league, values, rid):
             "players": players, "picks": picks}
 
 
+def ordn(k):
+    return f"{k}{'th' if 10 <= k % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(k % 10, 'th')}"
+
+
 def core_age(players, n=8):
     core = sorted([p for p in players if p["pos"] in TH and p["age"]], key=lambda p: -p["value"])[:n]
     return st.mean(p["age"] for p in core) if core else None
@@ -75,17 +79,21 @@ def grade(league, values, rid, bm, own_bundle):
     old = me["core_age"] is not None and me["core_age"] >= 27
     young = me["core_age"] is not None and me["core_age"] < 25.5
     reasons = []
-    if rank_pct >= 0.6 and depth_pct >= 0.5:
+    if league.redraft:
+        mode = "contend"
+        reasons.append(f"redraft league: there is no next season to build for, so every move is for {league.season}; "
+                       f"{ordn(me['rank'])} of {n} with startable depth at the {int(depth_pct*100)}th percentile of the pool")
+    elif rank_pct >= 0.6 and depth_pct >= 0.5:
         mode = "contend"
         reasons.append(f"top-{me['rank']} record with startable depth at the {int(depth_pct*100)}th percentile of the pool")
     elif rank_pct <= 0.35 or (depth_pct <= 0.35 and value_pct <= 0.5):
         mode = "rebuild"
-        reasons.append(f"{me['rank']}th of {n} with startable depth at the {int(depth_pct*100)}th percentile" if rank_pct <= 0.35 else
+        reasons.append(f"{ordn(me['rank'])} of {n} with startable depth at the {int(depth_pct*100)}th percentile" if rank_pct <= 0.35 else
                        f"thin depth ({int(depth_pct*100)}th percentile) on a roster ranked {ledger_rank['total_value']}th in total value")
     else:
         mode = "retool"
-        reasons.append(f"mid-table ({me['rank']}th) with depth at the {int(depth_pct*100)}th percentile: neither window is open")
-    if old:
+        reasons.append(f"mid-table ({ordn(me['rank'])}) with depth at the {int(depth_pct*100)}th percentile: neither window is open")
+    if old and not league.redraft:
         reasons.append(f"core age {me['core_age']:.1f}: the top-8 assets are past the age where this format's value curve turns down")
         if mode == "retool":
             mode = "rebuild"
@@ -93,7 +101,7 @@ def grade(league, values, rid, bm, own_bundle):
         reasons.append(f"core age {me['core_age']:.1f}: young enough that the rebuild should be short")
     if value_pct <= 0.25:
         reasons.append(f"asset base ranks {ledger_rank['total_value']}th of {n} (players + picks)")
-    if me["firsts"].get(league.pick_seasons[0], 0) == 0:
+    if league.pick_seasons and me["firsts"].get(league.pick_seasons[0], 0) == 0:
         reasons.append(f"holds no {league.pick_seasons[0]} first-round pick")
     # target window: how many seasons until a realistic playoff push
     if mode == "contend":
@@ -101,7 +109,7 @@ def grade(league, values, rid, bm, own_bundle):
     elif mode == "retool":
         window = league.season + 1
     else:
-        window = league.season + (2 if young and me["firsts"].get(league.pick_seasons[0], 0) >= 1 else 3)
+        window = league.season + (2 if young and league.pick_seasons and me["firsts"].get(league.pick_seasons[0], 0) >= 1 else 3)
     now = sum(1 for p in me["players"] if p["pos"] in TH and p["startable"])
     if now - row["depth"] >= 2:
         reasons.append(f"roster as built today has {now} startable players against {row['depth']} produced for this team so far: "

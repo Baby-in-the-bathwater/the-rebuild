@@ -19,10 +19,12 @@ def call_text(g, league, bm, assets=None):
     if mode == "rebuild":
         return (f"Sell the production that will not survive to {g['window']}, buy first-round picks in the {league.pick_seasons[0]} and {league.pick_seasons[1]} drafts "
                 f"and players under 25, and plan on contending in {g['window']}.")
+    if mode == "contend" and league.redraft:
+        return ("Redraft: every move is for this season. Spend bench depth on a producer at your weakest starting spot, hold everything that scores, and ignore age.")
     if mode == "contend":
         return (f"The window is open now. Spend far-out picks and non-producing youth on an older producer at your weakest starting spot and hold everything that scores.")
     weak = " or ".join(buy_positions(g, me, league)) or "the weakest spot"
-    nxt = league.pick_seasons[0]
+    nxt = league.pick_seasons[0] if league.pick_seasons else None
     own_first = any(pk["round"] == 1 and pk["own"] and pk["season"] == nxt for pk in me["picks"])
     keep = f"Keep the producers and your own {nxt} first" if own_first else "Keep the producers"
     if assets is not None and not assets["sell"]:
@@ -93,10 +95,12 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
         if league.fmt["superflex"]:
             A(f"| QB in the Superflex | {row['sf_qb_rate'] * 100:.0f}% of weeks | | {pct.get('sf_qb_rate', '-')} |")
     A(f"| Player value | {me['player_value']:,} | {g['ledger_rank']['player_value']} | |")
-    A(f"| Pick value | {me['pick_value']:,} | {g['ledger_rank']['pick_value']} | |")
+    if not league.redraft:
+        A(f"| Pick value | {me['pick_value']:,} | {g['ledger_rank']['pick_value']} | |")
     if me["core_age"]:
         A(f"| Core age (top-8 assets) | {me['core_age']:.1f} | {g['ledger_rank']['core_age']} (1 = youngest) | |")
-    A(f"| First-round picks held | " + ", ".join(f"{s}: {c}" for s, c in me["firsts"].items()) + " | | |")
+    if not league.redraft:
+        A(f"| First-round picks held | " + ", ".join(f"{s}: {c}" for s, c in me["firsts"].items()) + " | | |")
     A("")
     A("Pool percentile is this team's within-league z-score placed against every team-season in the benchmark pool, so it reads the same in any league of this format. "
       "The first depth line is what this roster has actually produced, week by week, including missed weeks as zeros; a player acquired mid-season counts from the week he arrived, "
@@ -248,7 +252,7 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
             A(f"Regression of year-2 win% on the starting state and behaviour (n={o['n']}, R² {o['r2']:.2f}): starter age {c['age_n']:+.3f} per year, orphan takeover {c['orphan']:+.3f}, "
               f"net firsts acquired {c['r1_net']:+.3f} each, trades {c['trades']:+.3f} each, year-N depth {c['depth_n']:+.3f} per player. Low R² means the moves set the odds, not the outcome.")
             A("")
-    if bm:
+    if bm and not league.redraft:
         pk = bm["picks"]
         A("## Rookie pick hit rates in this format")
         A("")
@@ -269,6 +273,8 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
         A("")
     A("## Caveats")
     A("")
+    if league.redraft:
+        A("- This is a redraft league and the values feed is a dynasty market, which prices youth and age. Read the values as relative size this season only; a 30-year-old producer is worth more here than the number says and a rookie is worth less.")
     A("- Values are one public market (DynastyProcess). Your league's managers price things their own way; the ask / target / floor ladder is where to start, not where to end.")
     A("- Projected pick slots come from today's standings; they move every week until the season ends.")
     A("- Packages are built from what each counterparty actually holds, scored by what a team in your mode should want. They are openers. The counterparty's needs column tells you which one to lead with.")

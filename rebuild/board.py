@@ -26,10 +26,12 @@ def board_data(league, values, g, assets, deals, call_text):
                      | {"players": [{k: p[k] for k in ("id", "name", "pos", "team", "age", "ppg", "gp", "value", "ir", "taxi", "inj", "starter", "startable")} for p in t["players"]],
                         "picks": [{k: p[k] for k in ("season", "round", "orig", "orig_rid", "own", "proj_slot", "value", "key")} for p in t["picks"]]})
     ledger = {p["id"]: "sell" for p in assets["sell"]} | {p["id"]: "hold" for p in assets["hold"]}
-    nxt = league.pick_seasons[0]
-    note = (f"Values are DynastyProcess {'Superflex' if values.superflex else '1QB'} values as of {values.asof}; picks priced by the original team's projected {nxt} slot "
-            f"from current standings (early, mid, late third), flat the year after, then 15% off per further year. PPG is this season through week {league.week}, "
-            f"games with points only. ST marks a startable average (QB 14, RB 9, WR 9, TE 7). SELL and HOLD tags on your roster are the ledger from the brief.")
+    nxt = league.pick_seasons[0] if league.pick_seasons else None
+    pick_note = (f"picks priced by the original team's projected {nxt} slot from current standings (early, mid, late third), flat the year after, then 15% off per further year. "
+                 if nxt else "redraft league: no future picks; the values are a dynasty market, so read them as relative size this season and ignore the age premium. ")
+    note = (f"Values are DynastyProcess {'Superflex' if values.superflex else '1QB'} values as of {values.asof}; {pick_note}"
+            f"PPG is this season through week {league.week}, games with points only. ST marks a startable average (QB 14, RB 9, WR 9, TE 7). "
+            f"SELL and HOLD tags on your roster are the ledger from the brief.")
     return {"league": league.lg.get("name"), "league_id": league.id, "season": league.season, "week": league.week, "asof": values.asof,
             "me_rid": g["team"]["rid"], "mode": g["mode"], "reasons": g["reasons"], "call_text": call_text, "pick_seasons": league.pick_seasons,
             "teams": teams, "ledger": ledger, "deals": [deal_json(d) for d in deals], "note": note}

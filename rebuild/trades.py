@@ -184,12 +184,18 @@ def buy_counterparties(g, league, pos, mode):
     return [(t, needs) for _, t, needs in out]
 
 
-def buy_positions(g, me, league):
-    """The two weakest positions by this season's z, skipping any the roster already covers when healthy
-    (two startable QBs in Superflex, two RBs, three WRs, one TE): that weakness is availability, not talent."""
+def coverage(me, league):
+    """Starters needed per position (Superflex counts as a QB) and startable players held today."""
     f = league.fmt
     need_n = {"QB": (f.get("qb") or 1) + (f.get("sf") or 0), "RB": f.get("rb") or 2, "WR": f.get("wr") or 3, "TE": f.get("te") or 1}
     have = {pos: sum(1 for p in me["players"] if p["pos"] == pos and p["startable"]) for pos in need_n}
+    return need_n, have
+
+
+def buy_positions(g, me, league):
+    """The two weakest positions by this season's z, skipping any the roster already covers when healthy
+    (two startable QBs in Superflex, two RBs, three WRs, one TE): that weakness is availability, not talent."""
+    need_n, have = coverage(me, league)
     ranked = positional_need(g["rows"], me["rid"])
     return [pos for pos in ranked if have.get(pos, 0) < need_n[pos]][:2] or ranked[:2] or ["RB", "WR"]
 
@@ -201,6 +207,13 @@ def buy_deals(g, league, me, mode, max_counterparties=6):
     out = []
     want = buy_positions(g, me, league)
     my_items = tradeable(me, "rebuild", league)  # picks and youth, scored the way a rebuilder wants them
+    if league.redraft:
+        # no picks exist and age is irrelevant: spend bench depth, and starters at a position with two spare
+        need_n, have = coverage(me, league)
+        my_items = [{"kind": "player", "id": p["id"], "value": p["value"], "pref": 1.5 if not p["startable"] else 0.8, "pos": p["pos"], "age": p["age"],
+                     "label": f"{p['name']} ({p['pos']}, {p['age'] or '?'})"}
+                    for p in me["players"] if p["pos"] in TH and p["value"] >= MIN_PACKAGE_PIECE
+                    and (not p["startable"] or have.get(p["pos"], 0) - need_n.get(p["pos"], 9) >= 2)]
     if mode == "retool":
         own_next_first = {pk["key"] for pk in me["picks"] if pk["round"] == 1 and pk["own"] and pk["season"] == league.pick_seasons[0]}
         core = {p["id"] for p in sorted((p for p in me["players"] if p["pos"] in TH), key=lambda p: -p["value"])[:8]}
@@ -210,7 +223,7 @@ def buy_deals(g, league, me, mode, max_counterparties=6):
         for t, _ in buy_counterparties(g, league, pos, mode)[:(max_counterparties if mode == "contend" else None)]:
             if mode == "contend":
                 targets = sorted([p for p in t["players"] if p["pos"] == pos and p["startable"] and p["value"] >= MIN_SELL_VALUE
-                                  and (p["age"] or 0) >= SELL_AGE[pos] - 2], key=lambda p: -p["ppg"])[:1]
+                                  and (league.redraft or (p["age"] or 0) >= SELL_AGE[pos] - 2)], key=lambda p: -p["ppg"])[:1]
             else:
                 targets = sorted([p for p in t["players"] if p["pos"] == pos and p["startable"] and p["value"] >= 1500
                                   and (p["age"] or 99) <= SELL_AGE[pos] - 1 and p["value"] * ASK <= budget], key=lambda p: -p["value"])[:1]

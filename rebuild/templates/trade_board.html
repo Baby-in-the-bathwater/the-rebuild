@@ -134,7 +134,7 @@ const save = () => { try { localStorage.setItem("rebuild-board-" + DATA.league_i
 
 function panel(team, hl, isMe) {
   const h = [];
-  h.push(`<div class="phead"><h2>${team.name}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span><span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span><span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(team.player_value)}</b></span><span>picks <b>${fmt(team.pick_value)}</b></span></div></div>`);
+  h.push(`<div class="phead"><h2>${team.name}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span>${SEASONS.length ? `<span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span>` : ""}<span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(team.player_value)}</b></span><span>picks <b>${fmt(team.pick_value)}</b></span></div></div>`);
   h.push(`<div class="cols"><span>Pos</span><span>Player</span><span>Team</span><span>Age</span><span>PPG</span><span>Value</span></div>`);
   for (const pos of POS) {
     const ps = team.players.filter(p => p.pos === pos);
@@ -147,6 +147,7 @@ function panel(team, hl, isMe) {
     }
     h.push(`</div>`);
   }
+  if (SEASONS.length) {
   h.push(`<div class="picks"><div class="gh">Draft picks<span class="bar" style="background:var(--pick)"></span><span>${fmt(team.pick_value)}</span></div>`);
   for (const yr of SEASONS) {
     const ps = team.picks.filter(p => p.season === yr);
@@ -159,6 +160,7 @@ function panel(team, hl, isMe) {
     h.push(`</div></div>`);
   }
   h.push(`</div>`);
+  }
   return h.join("");
 }
 

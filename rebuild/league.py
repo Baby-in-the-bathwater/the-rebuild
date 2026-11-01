@@ -104,7 +104,8 @@ class League:
         # picks: every (season, round, original roster) with its current holder
         holder = {(str(p["season"]), int(p["round"]), int(p["roster_id"])): int(p["owner_id"]) for p in self.traded}
         first = self.season if self.draft_pending else self.season + 1
-        self.pick_seasons = [str(y) for y in range(first, first + 3)]
+        self.redraft = not (self.fmt["dynasty"] or self.fmt["keeper"])
+        self.pick_seasons = [] if self.redraft else [str(y) for y in range(first, first + 3)]
         self.picks = defaultdict(list)
         for season in self.pick_seasons:
             for rnd in range(1, self.rounds + 1):
