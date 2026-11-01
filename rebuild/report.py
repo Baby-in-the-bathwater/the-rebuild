@@ -5,6 +5,8 @@ from .trades import buy_positions
 from .metrics import TH, team_rows, zwithin
 
 
+BRIEF_DEALS = 12   # the brief lists this many; the trade board shows every deal
+
 def pc(x, d=0):
     return "-" if x is None else f"{x * 100:.{d}f}%"
 
@@ -197,7 +199,7 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
     if not deals:
         A("No deal clears the floor with any counterparty right now. Re-run after the next waiver cycle or widen the counterparties.")
         A("")
-    for i, d in enumerate(deals, 1):
+    for i, d in enumerate(deals[:BRIEF_DEALS], 1):
         fixed = d.get("sends") or d.get("receives")
         A(f"### {i}. {d['title']}")
         A("")
@@ -214,6 +216,9 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
             A(f"| {name} | " + ", ".join(f"{x['label']} ({x['value']:,})" for x in v["items"]) + f" | {v['value']:,} | {ratio * 100:.0f}% |")
         A("")
         A(f"Walk away if {d['walk']}.")
+        A("")
+    if len(deals) > BRIEF_DEALS:
+        A(f"{len(deals) - BRIEF_DEALS} more deals, ranked below these, are on the trade board (All deals view).")
         A("")
     # expectations
     if bm and g["mode"] != "contend":

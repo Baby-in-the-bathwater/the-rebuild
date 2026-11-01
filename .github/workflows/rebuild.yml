@@ -28,6 +28,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - name: Run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python -m rebuild --league "${{ inputs.league_id }}" --team "${{ inputs.team }}" --out out --pdf ${{ inputs.pool && '--pool' || '' }}
       - uses: actions/upload-artifact@v4

@@ -403,8 +403,8 @@ function renderHistory() {
     const wNow = t.winner_now != null ? byRid[t.winner_now] : null, wThen = t.winner_then != null ? byRid[t.winner_then] : null;
     const early = t.days_ago < 56;
     const mine = t.sides.some(s => s.uid === DATA.me_uid);
-    h.push(`<article class="tcard${mine ? " mine" : ""}"><header><span><b>${t.date}</b> · ${t.season} week ${t.week} · values of ${t.values_asof}</span>
-      <span>${wThen ? `${wThen.manager} won at the time` : "Fair at the time"} · <span class="vbadge${wNow ? " win" : ""}">${wNow ? `${wNow.manager} wins today` : "Even today"}${early ? " (early)" : ""}</span></span></header><div class="tsides">`);
+    h.push(`<article class="tcard${mine ? " mine" : ""}"><header><span><b>${t.date}</b> · ${t.season} week ${t.week} · ${t.values_asof ? `values of ${t.values_asof}` : "no values from then"}</span>
+      <span>${!t.values_asof ? "Unpriced at the time" : wThen ? `${wThen.manager} won at the time` : "Fair at the time"} · <span class="vbadge${wNow ? " win" : ""}">${wNow ? `${wNow.manager} wins today` : "Even today"}${early ? " (early)" : ""}</span></span></header><div class="tsides">`);
     for (const s of t.sides) {
       h.push(`<div class="tside${wNow && wNow === s ? " won" : ""}"><div class="tsh"><b>${s.team}</b>${s.team !== s.manager ? ` <small>(${s.manager})</small>` : ""} <small>gets</small></div>
         <ul>${s.gets.map(itemLi).join("") || '<li><span></span><span class="lb" style="color:var(--muted)">nothing</span><span></span></li>'}</ul>
@@ -415,7 +415,7 @@ function renderHistory() {
     }
     h.push(`</div></article>`);
   }
-  h.push(`</div><p class="hint">Picks are priced at the time by their exact slot when that draft was next, mid-round the season after, flat beyond. Today a drafted pick is worth the player taken with it; an undrafted one is priced like the board's picks. FAAB is not valued. Values only: a deal that won a title can still lose on today's values.</p></div>`);
+  h.push(`</div><p class="hint">Picks are priced at the time by their exact slot when that draft was next, mid-round the season after, flat beyond. Today a drafted pick is worth the player taken with it; an undrafted one is priced like the board's picks. FAAB is not valued. Trades from before the values feed began (February 2019) are shown but not priced at the time. Values only: a deal that won a title can still lose on today's values.</p></div>`);
   el.innerHTML = h.join("");
 
   el.querySelectorAll(".ht.lb th button").forEach(b => b.onclick = () => {

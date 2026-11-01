@@ -25,6 +25,11 @@ def norm(s):
     return re.sub(r"[^a-z]", "", s)
 
 
+# Column names the feed used before April 2020 (historical snapshots), mapped onto today's. Those files carry no
+# scrape_date and no PICK rows.
+OLD_COLUMNS = {"mergename": "player", "1QBValue": "value_1qb", "2QBValue": "value_2qb", "2QB Value": "value_2qb"}
+
+
 class Values:
     def __init__(self, rows, superflex):
         self.col = "value_2qb" if superflex else "value_1qb"
@@ -33,6 +38,8 @@ class Values:
         self.picks = {}
         self.asof = None
         for r in rows:
+            if "player" not in r:
+                r = {OLD_COLUMNS.get(k.strip("\ufeff "), k.strip("\ufeff ")): v for k, v in r.items() if k is not None}
             try:
                 v = int(float(r[self.col]))
             except (ValueError, TypeError, KeyError):
@@ -71,6 +78,8 @@ class Values:
             if not draft_pending:
                 return 0
             exact = self.picks.get(f"{season} Pick {rnd}.{proj_slot:02d}")
+            if exact is None:   # 2019 snapshots number the current draft's picks overall ("2019 Pick 13")
+                exact = self.picks.get(f"{season} Pick {(rnd - 1) * n_teams + proj_slot}")
             if exact is not None:
                 return exact
             return self.picks.get(f"{season} {self.tier(proj_slot, n_teams)} {rn}", self.picks.get(f"{season} {rn}", 0))

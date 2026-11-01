@@ -33,10 +33,14 @@ def snapshot_index(cache_dir, ttl=6 * 24 * 3600):
     if os.path.exists(p) and time.time() - os.path.getmtime(p) < ttl:
         with open(p, encoding="utf-8") as f:
             return json.load(f)
+    headers = {"Accept": "application/vnd.github+json"}
+    token = os.environ.get("GITHUB_TOKEN")   # the Actions runner's token: its shared IP hits the anonymous limit often
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     out, page = [], 1
     while True:
         r = requests.get(COMMITS_URL, params={"path": "files/values.csv", "per_page": 100, "page": page}, timeout=30,
-                         headers={"Accept": "application/vnd.github+json"})
+                         headers=headers)
         r.raise_for_status()
         batch = r.json()
         out += [(c["commit"]["committer"]["date"], c["sha"]) for c in batch]
@@ -49,7 +53,7 @@ def snapshot_index(cache_dir, ttl=6 * 24 * 3600):
     return out
 
 
-def snapshot_values(cache_dir, sha, superflex):
+def snapshot_values(cache_dir, sha, superflex, date=None):
     p = os.path.join(cache_dir, "dp_history", f"{sha}.csv")
     if not os.path.exists(p):
         r = requests.get(RAW_URL.format(sha=sha), timeout=60)
@@ -57,11 +61,14 @@ def snapshot_values(cache_dir, sha, superflex):
         with open(p, "w", encoding="utf-8", newline="") as f:
             f.write(r.text)
     with open(p, encoding="utf-8") as f:
-        return Values(list(csv.DictReader(io.StringIO(f.read()))), superflex)
+        v = Values(list(csv.DictReader(io.StringIO(f.read()))), superflex)
+    v.asof = v.asof or (date or "")[:10] or None   # files before April 2020 carry no scrape_date
+    return v
 
 
 def snapshot_for(index, when):
-    """Latest snapshot committed on or before `when` (a datetime in UTC); the oldest one if the trade predates them all."""
+    """Latest snapshot committed on or before `when` (a datetime in UTC), or None if the trade predates the feed
+    (February 2019): a trade is never priced with values from after it was made."""
     iso = when.strftime("%Y-%m-%dT%H:%M:%SZ")
     best = None
     for date, sha in index:
@@ -69,7 +76,7 @@ def snapshot_for(index, when):
             best = (date, sha)
         else:
             break
-    return best or (index[0] if index else None)
+    return best
 
 
 # ------------------------------------------------------------------ league plumbing
@@ -146,9 +153,9 @@ def build(cache_dir, bundles, league, values, log=print):
     pdb = league.pdb
     snaps = {}
 
-    def snap(sha):
+    def snap(date, sha):
         if sha not in snaps:
-            snaps[sha] = snapshot_values(cache_dir, sha, superflex)
+            snaps[sha] = snapshot_values(cache_dir, sha, superflex, date)
         return snaps[sha]
 
     def pname(pid):
@@ -191,8 +198,12 @@ def build(cache_dir, bundles, league, values, log=print):
         team = {u["user_id"]: ((u.get("metadata") or {}).get("team_name") or "").strip() for u in b.get("users") or []}
         owner = {r["roster_id"]: r.get("owner_id") for r in b.get("rosters") or []}
         n = len(b.get("rosters") or []) or league.n
+        # the values of the week: none before the feed began, and none for a trade with picks in it when that week's
+        # file has no pick rows (before April 2020), so an old pick-for-player trade is not read as a steal
         sd = snapshot_for(index, when)
-        then = snap(sd[1]) if sd else None
+        then = snap(*sd) if sd else None
+        if then is not None and (not then.players or (t.get("draft_picks") and not then.picks)):
+            then = None
         _, draft_start = drafted.get(season, ({}, None))
         draft_pending = draft_start is None or t["created"] < draft_start
 
@@ -251,7 +262,7 @@ def build(cache_dir, bundles, league, values, log=print):
             return best["rid"] if edge >= MIN_EDGE and edge > EVEN_BAND * max(best[key_got], best[key_gave]) else None
 
         out.append({"id": t.get("transaction_id"), "date": when.strftime("%Y-%m-%d"), "season": season, "week": week,
-                    "values_asof": sd[0][:10] if sd else None, "sides": list(sides.values()),
+                    "values_asof": then.asof if then else None, "sides": list(sides.values()),
                     "winner_then": verdict("got_then", "gave_then"), "winner_now": verdict("got_now", "gave_now"),
                     "days_ago": (dt.datetime.now(dt.timezone.utc) - when).days})
     out.sort(key=lambda x: x["date"], reverse=True)
