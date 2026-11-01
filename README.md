@@ -38,6 +38,7 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 7. **Writes the ledger**: sell (production that will not survive the window), hold (young core), keep (cheap youth).
 8. **Drafts the deals**. Rebuild: for each sell asset and each contender with pick capital, an Ask / Target / Floor package built from what that team actually holds, scored by what a rebuilder should want (firsts in the next two drafts, players under 25). Contend: buy an older producer at the weakest starting spot with far-out picks and non-producing youth. Retool: sell anything past its sell age the same way, and buy one young starter at the weakest uncovered position with surplus picks and non-core youth, keeping the own first in the next draft; buy packages read Open / Target / Ceiling (what you pay).
 9. **Writes it up**: `brief.md` (the call, standing, what wins, history, ledger, deals, what to expect, pick hit rates; `--pdf` adds `brief.pdf`) and `trade-board.html` (Sleeper-style, all rosters, every deal highlighted on both sides with the value return).
+10. **Builds the trade board's other views**: click any players and picks to build your own trade and see its return; compare every drafted deal side by side (All deals); tag each rostered player's production against his price (P/V column, BUY LOW / SELL HIGH); and price the league's whole trade history (League trades) with the DynastyProcess values from the week of each trade and with today's, naming who won each one, who trades well, and what this league pays over or under market for each kind of asset.
 
 ## Three ways to run it
 
@@ -58,6 +59,7 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 --crawl-seconds S    time cap for discovery (default 600)
 --benchmarks PATH    use this benchmark JSON
 --no-history         skip the league's own previous-season walk
+--no-trade-history   skip pricing the league's past trades (it fetches weekly DynastyProcess snapshots from GitHub, cached after the first run)
 --refresh-values     re-download the values feed
 --cache-dir DIR      where pulls and crawled seasons are cached (default ./cache)
 --pdf                also render brief.pdf (needs Chrome, Chromium or Edge installed; the Action does this)
@@ -77,5 +79,5 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the metric definitions, the call rule, 
 ## Data and credits
 
 - Sleeper public API (`api.sleeper.app/v1`). Read-only, unauthenticated.
-- Trade values: [DynastyProcess](https://github.com/dynastyprocess/data) open data, MIT.
+- Trade values: [DynastyProcess](https://github.com/dynastyprocess/data) open data, MIT. Historical values for the trade history come from that repo's weekly commits of `values.csv`.
 - Built by Core-E LLC. MIT license.
