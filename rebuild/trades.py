@@ -197,7 +197,12 @@ def buy_positions(g, me, league):
     (two startable QBs in Superflex, two RBs, three WRs, one TE): that weakness is availability, not talent."""
     need_n, have = coverage(me, league)
     ranked = positional_need(g["rows"], me["rid"])
-    return [pos for pos in ranked if have.get(pos, 0) < need_n[pos]][:2] or ranked[:2] or ["RB", "WR"]
+    uncovered = [pos for pos in ranked if have.get(pos, 0) < need_n[pos]][:2]
+    if uncovered:
+        return uncovered
+    row = next((r for r in g["rows"] if r["rid"] == me["rid"]), None) or {}
+    below = [pos for pos in ranked if (row.get("z_" + pos) or 0) < 0][:2]
+    return below or ranked[:1] or ["RB"]
 
 
 def buy_deals(g, league, me, mode, max_counterparties=6):

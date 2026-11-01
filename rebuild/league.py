@@ -14,7 +14,7 @@ def fmt_of(lg):
         "teams": lg.get("total_rosters"),
         "dynasty": s.get("type") == 2,
         "keeper": s.get("type") == 1,
-        "superflex": "SUPER_FLEX" in rp or rp.count("QB") >= 2,
+        "superflex": rp.count("QB") + rp.count("SUPER_FLEX") >= 2,
         "rec": round(float(sc.get("rec") or 0), 2),
         "te_prem": round(float(sc.get("bonus_rec_te") or 0), 2),
         "pass_td": sc.get("pass_td"),
