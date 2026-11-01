@@ -22,7 +22,7 @@ def deal_json(d):
 def board_data(league, values, g, assets, deals, call_text):
     teams = []
     for t in sorted(g["teams"].values(), key=lambda t: t["rank"]):
-        teams.append({k: t[k] for k in ("rid", "name", "wins", "losses", "pf", "rank", "proj_slot", "player_value", "pick_value", "startable", "core_age")}
+        teams.append({k: t[k] for k in ("rid", "name", "owner", "wins", "losses", "pf", "rank", "proj_slot", "player_value", "pick_value", "startable", "core_age")}
                      | {"players": [{k: p[k] for k in ("id", "name", "pos", "team", "age", "ppg", "gp", "value", "ir", "taxi", "inj", "starter", "startable")} for p in t["players"]],
                         "picks": [{k: p[k] for k in ("season", "round", "orig", "orig_rid", "own", "proj_slot", "value", "key")} for p in t["picks"]]})
     ledger = {p["id"]: "sell" for p in assets["sell"]} | {p["id"]: "hold" for p in assets["hold"]}

@@ -96,6 +96,57 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .summary{margin:12px 0 0;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;font-size:13px}
 .summary b{color:var(--accent)}
 .summary ul{margin:6px 0 0;padding-left:18px;color:var(--muted)}
+[data-key]{cursor:pointer}
+.row[data-key]:hover:not(.hl),.chip[data-key]:hover:not(.hl){background:color-mix(in srgb,var(--fg) 6%,transparent)}
+[data-key]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.vars.custom .var{opacity:.55}.vars.custom .var:hover{opacity:1}
+.custom-head{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.clear{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:6px;padding:3px 8px;font:700 11px var(--display);letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.side li.empty{color:var(--muted);font-style:italic;justify-content:center}
+.hint{margin-top:8px;font-size:12px;color:var(--muted)}
+.who{text-transform:none;font:500 .62em var(--body);letter-spacing:0;color:var(--muted);margin-left:6px;vertical-align:.12em}
+.tab .who{font-size:12px;margin-left:4px;vertical-align:0}
+.tab[aria-selected="true"] .who{color:#1a1400;opacity:.75}
+/* view switch + all-deals comparison */
+.views{display:inline-flex;gap:0;margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.view{appearance:none;border:0;background:var(--panel);color:var(--muted);padding:7px 14px;font:700 13px var(--display);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.view + .view{border-left:1px solid var(--line)}
+.view[aria-selected="true"]{background:var(--accent);color:#1a1400}
+.view:focus-visible,.open:focus-visible,.ctl select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 0;color:var(--muted);font-size:12px}
+.ctl label{display:inline-flex;align-items:center;gap:6px}
+.ctl select{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font:500 13px var(--body)}
+.cards{display:flex;flex-direction:column;gap:12px}
+.dcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.dcard > header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:10px 14px;background:var(--panel2);border-bottom:1px solid var(--line)}
+.dcard .rk{font:700 22px var(--display);color:var(--muted);min-width:30px}
+.dcard .dt{font:700 19px var(--display);text-transform:uppercase;letter-spacing:.01em;line-height:1.1}
+.dcard .dt .arrow{color:var(--muted);margin:0 4px}
+.dcard .dm{display:flex;flex-wrap:wrap;gap:3px 12px;color:var(--muted);font-size:12px;margin-top:3px}
+.dcard .dm b{color:var(--fg);font-weight:600}
+.fit{font:700 10px var(--display);letter-spacing:.06em;padding:1px 5px;border-radius:3px;background:var(--recv);color:#0b0e14;text-transform:uppercase}
+.open{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:6px;padding:6px 10px;font:700 12px var(--display);letter-spacing:.06em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
+.open:hover{border-color:var(--accent)}
+.vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.vcol{padding:10px 14px;min-width:0;display:flex;flex-direction:column}
+.vcol + .vcol{border-left:1px solid var(--line)}
+.vcol.tgt{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.vh{display:flex;justify-content:space-between;align-items:baseline;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.vcol.tgt .vh > span:first-child{color:var(--accent)}
+.vh .p{font:700 22px var(--display);color:var(--fg);letter-spacing:0}
+.vh .p.good{color:var(--recv)}.vh .p.bad{color:var(--send)}
+.vcol ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:3px;flex:1}
+.vcol li{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:6px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums}
+.vcol li .badge{font-size:10px;padding:2px 0}
+.vcol li .lb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vcol li .vv{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.vcol .same{color:var(--muted);font-size:12px;font-style:italic;margin-top:6px;flex:1}
+.vt{display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.vt b{font-family:var(--mono);color:var(--fg);font-weight:500}
+.dcard footer{padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.dcard footer b{color:var(--fg)}
+@media (max-width:760px){.vgrid{grid-template-columns:1fr}.vcol + .vcol{border-left:0;border-top:1px solid var(--line)}.dcard > header{grid-template-columns:auto minmax(0,1fr)}.dcard .open{grid-column:1 / -1;justify-self:start}}
+[hidden]{display:none !important}
 @media (prefers-reduced-motion:no-preference){.row,.chip{transition:box-shadow .15s,background .15s}}
 </style>
 </head>
@@ -105,8 +156,10 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
   <div class="legend"><span><i style="background:var(--qb)"></i>QB</span><span><i style="background:var(--rb)"></i>RB</span><span><i style="background:var(--wr)"></i>WR</span><span><i style="background:var(--te)"></i>TE</span><span><i style="background:var(--def)"></i>DEF</span><span><i style="background:var(--send)"></i>you send</span><span><i style="background:var(--recv)"></i>you receive</span></div>
 </header>
 <div class="summary" id="summary"></div>
+<div class="views" id="views" role="tablist" aria-label="View"></div>
+<section id="compare" aria-label="All proposed deals" hidden></section>
 <div class="tabs" id="tabs" role="tablist" aria-label="Counterparty"></div>
-<div class="board">
+<div class="board" id="board">
   <section class="panel" id="left" aria-label="Your roster"></section>
   <aside class="rail" id="rail"></aside>
   <section class="panel" id="right" aria-label="Counterparty roster"></section>
@@ -123,6 +176,9 @@ const POS = ["QB", "RB", "WR", "TE", "K", "DEF"];
 const PC = {QB: "var(--qb)", RB: "var(--rb)", WR: "var(--wr)", TE: "var(--te)", K: "var(--k)", DEF: "var(--def)"};
 const ord = n => n + (["th","st","nd","rd"][(n%10>3||[11,12,13].includes(n%100))?0:n%10]);
 const pad = s => "1." + String(s).padStart(2, "0");
+// Sleeper DMs go by username, so show it beside the team name unless the team has no custom name (then the name already is the username).
+const handle = t => (t.owner && t.owner !== "(orphan)" && t.owner !== t.name ? t.owner : "");
+const who = t => (handle(t) ? `<span class="who">(${handle(t)})</span>` : "");
 const SEASONS = DATA.pick_seasons;
 const dealsFor = rid => DATA.deals.filter(d => d.cp_rid === rid);
 const withDeals = [...new Set(DATA.deals.map(d => d.cp_rid))];
@@ -132,9 +188,88 @@ let sel = {team: others[0], deal: 0, v: null};
 try { const s = JSON.parse(localStorage.getItem("rebuild-board-" + DATA.league_id) || "null"); if (s && T[s.team] && s.team !== ME) sel = s; } catch (e) {}
 const save = () => { try { localStorage.setItem("rebuild-board-" + DATA.league_id, JSON.stringify(sel)); } catch (e) {} };
 
+// Custom trades: sel.custom is null (show the drafted deal) or {send: [keys], recv: [keys]} built by clicking rows and pick chips.
+// Keys are "p:<player id>" or "k:<pick key>"; your roster feeds the send side, the counterparty's roster the receive side.
+const keyOf = it => (it.kind === "player" ? "p:" + it.id : "k:" + it.key);
+const pickLabel = pk => `${pk.season} R${pk.round}` + (pk.own ? "" : ` via ${pk.orig}`) + (pk.proj_slot && pk.round === 1 ? ` (${pad(pk.proj_slot)})` : "");
+function assetOf(team, key) {
+  const id = key.slice(2);
+  if (key.startsWith("p:")) {
+    const p = team.players.find(p => String(p.id) === id);
+    return p && {kind: "player", id: p.id, label: `${p.name} (${p.pos}, ${p.age ?? "?"})`, value: p.value || 0};
+  }
+  const pk = team.picks.find(p => p.key === id);
+  return pk && {kind: "pick", key: pk.key, label: pickLabel(pk), value: pk.value || 0};
+}
+let refocus = null;
+
+// All-deals view: every drafted deal as a card, variants side by side, in the brief's ranked order by default.
+const PL = Object.fromEntries(DATA.teams.flatMap(t => t.players.map(p => [String(p.id), p])));
+const sum = items => items.reduce((a, b) => a + b.value, 0);
+const dealAsset = d => d.fixed.map(x => x.label.replace(/ \(.*\)$/, "")).join(" + ");
+const dealPct = (d, vname) => {      // value you receive over value you send, for either deal direction
+  const f = sum(d.fixed), v = d.vars[vname].value;
+  const [out, inn] = d.fixed_side === "sends" ? [f, v] : [v, f];
+  return out ? Math.round(inn / out * 100) : null;
+};
+const pctClass = p => (p === null ? "" : p >= 100 ? "good" : p < 85 ? "bad" : "");
+const tgtName = d => (d.vars.Target ? "Target" : Object.keys(d.vars)[0]);
+function itemHtml(it) {
+  if (it.kind === "player") {
+    const p = PL[String(it.id)], pos = p ? p.pos : "";
+    return `<li><span class="badge" style="background:${PC[pos] || "var(--k)"}">${pos}</span><span class="lb" title="${it.label}">${it.label}</span><span class="vv">${fmt(it.value)}</span></li>`;
+  }
+  const r = (it.label.match(/ R(\d)/) || [])[1] || "";
+  return `<li><span class="badge" style="background:${r === "1" ? "var(--accent)" : "var(--pick)"}">R${r}</span><span class="lb" title="${it.label}">${it.label}</span><span class="vv">${fmt(it.value)}</span></li>`;
+}
+function renderCompare() {
+  const cmp = sel.cmp || (sel.cmp = {sort: "rank", asset: "all"});
+  const assets = [...new Set(DATA.deals.map(dealAsset))];
+  if (cmp.asset !== "all" && !assets.includes(cmp.asset)) cmp.asset = "all";
+  let rows = DATA.deals.map((d, i) => ({d, i}));
+  if (cmp.asset !== "all") rows = rows.filter(r => dealAsset(r.d) === cmp.asset);
+  if (cmp.sort === "return") rows.sort((a, b) => (dealPct(b.d, tgtName(b.d)) ?? -1) - (dealPct(a.d, tgtName(a.d)) ?? -1) || a.i - b.i);
+  else if (cmp.sort === "team") rows.sort((a, b) => a.d.counterparty.localeCompare(b.d.counterparty) || a.i - b.i);
+  else if (cmp.sort === "value") rows.sort((a, b) => b.d.vars[tgtName(b.d)].value - a.d.vars[tgtName(a.d)].value || a.i - b.i);
+
+  const el = document.getElementById("compare");
+  const opt = (v, label, cur) => `<option value="${v}"${v === cur ? " selected" : ""}>${label}</option>`;
+  const h = [`<div class="ctl"><label>Sort ${`<select id="cmp-sort">${opt("rank", "Ranked (as in the brief)", cmp.sort)}${opt("return", "Target return, high to low", cmp.sort)}${opt("value", "Target value, high to low", cmp.sort)}${opt("team", "Team", cmp.sort)}</select>`}</label>
+    <label>${DATA.deals.some(d => d.fixed_side === "sends") ? "Selling" : "Buying"} <select id="cmp-asset">${opt("all", `All (${DATA.deals.length})`, cmp.asset)}${assets.map(a => opt(a, `${a} (${DATA.deals.filter(d => dealAsset(d) === a).length})`, cmp.asset)).join("")}</select></label>
+    <span>Return is value received over value sent. Green at 100%+, red under 85%.</span></div><div class="cards">`];
+  for (const {d, i} of rows) {
+    const t = T[d.cp_rid], sells = d.fixed_side === "sends";
+    const vnames = Object.keys(d.vars), tn = tgtName(d);
+    const fit = (d.title.match(/\(needs (\w+)\)/) || [])[1];
+    h.push(`<article class="dcard"><header><span class="rk">#${i + 1}</span><div>
+      <div class="dt">${sells ? `${dealAsset(d)}<span class="arrow">→</span>${t.name}` : `${dealAsset(d)}<span class="arrow">←</span>${t.name}`}${who(t)}</div>
+      <div class="dm"><span>${sells ? "you send" : "you receive"} <b>${d.fixed.map(x => x.label).join(", ")}</b> · <b>${fmt(sum(d.fixed))}</b></span><span><b>${t.wins}-${t.losses}</b> · ${ord(t.rank)} of ${DATA.teams.length}</span>${fit ? `<span class="fit">needs ${fit}</span>` : ""}</div>
+      </div><button class="open" type="button" data-i="${i}">Open on board</button></header><div class="vgrid">`);
+    vnames.forEach((n, k) => {
+      const v = d.vars[n], p = dealPct(d, n);
+      const prev = k ? d.vars[vnames[k - 1]] : null;
+      const same = prev && prev.items.map(keyOf).join() === v.items.map(keyOf).join();
+      h.push(`<div class="vcol${n === tn ? " tgt" : ""}"><div class="vh"><span>${n}</span><span class="p ${pctClass(p)}">${p === null ? "–" : p + "%"}</span></div>
+        ${same ? `<div class="same">Same package as ${vnames[k - 1]}</div>` : `<ul>${v.items.map(itemHtml).join("")}</ul>`}
+        <div class="vt"><span>${sells ? "you receive" : "you send"}</span><b>${fmt(v.value)}</b></div></div>`);
+    });
+    h.push(`</div><footer><b>Walk away if</b> ${d.walk}.</footer></article>`);
+  }
+  h.push(`</div>`);
+  el.innerHTML = h.join("");
+  el.querySelector("#cmp-sort").onchange = e => { cmp.sort = e.target.value; save(); render(); };
+  el.querySelector("#cmp-asset").onchange = e => { cmp.asset = e.target.value; save(); render(); };
+  el.querySelectorAll(".open").forEach(b => b.onclick = () => {
+    const d = DATA.deals[+b.dataset.i];
+    sel = {team: d.cp_rid, deal: dealsFor(d.cp_rid).indexOf(d), v: null, custom: null, view: "board", cmp};
+    save(); render();
+    document.getElementById("board").scrollIntoView({behavior: "smooth", block: "start"});
+  });
+}
+
 function panel(team, hl, isMe) {
   const h = [];
-  h.push(`<div class="phead"><h2>${team.name}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span>${SEASONS.length ? `<span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span>` : ""}<span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(team.player_value)}</b></span><span>picks <b>${fmt(team.pick_value)}</b></span></div></div>`);
+  h.push(`<div class="phead"><h2>${team.name}${who(team)}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span>${SEASONS.length ? `<span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span>` : ""}<span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(team.player_value)}</b></span><span>picks <b>${fmt(team.pick_value)}</b></span></div></div>`);
   h.push(`<div class="cols"><span>Pos</span><span>Player</span><span>Team</span><span>Age</span><span>PPG</span><span>Value</span></div>`);
   for (const pos of POS) {
     const ps = team.players.filter(p => p.pos === pos);
@@ -143,7 +278,7 @@ function panel(team, hl, isMe) {
     for (const p of ps) {
       const m = hl.players[p.id];
       const cls = isMe && DATA.ledger[p.id] ? " " + DATA.ledger[p.id] : "";
-      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${p.id}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${p.name}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${p.inj}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}</span><span class="num">${p.team}</span><span class="num">${p.age ?? ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}</span><span class="num val">${p.value ? fmt(p.value) : "–"}</span></div>`);
+      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${p.id}" data-key="p:${p.id}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${p.name}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${p.inj}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}</span><span class="num">${p.team}</span><span class="num">${p.age ?? ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}</span><span class="num val">${p.value ? fmt(p.value) : "–"}</span></div>`);
     }
     h.push(`</div>`);
   }
@@ -155,7 +290,7 @@ function panel(team, hl, isMe) {
     if (!ps.length) h.push(`<span class="none">none</span>`);
     for (const p of ps) {
       const m = hl.picks[p.key];
-      h.push(`<span class="chip${m ? " hl " + m : ""}"><span class="r r${p.round}">R${p.round}</span>${p.own ? "own" : "via " + p.orig}${p.proj_slot && p.round === 1 ? `<small>${pad(p.proj_slot)}</small>` : ""}<span class="v">${fmt(p.value)}</span></span>`);
+      h.push(`<span class="chip${m ? " hl " + m : ""}" data-key="k:${p.key}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="r r${p.round}">R${p.round}</span>${p.own ? "own" : "via " + p.orig}${p.proj_slot && p.round === 1 ? `<small>${pad(p.proj_slot)}</small>` : ""}<span class="v">${fmt(p.value)}</span></span>`);
     }
     h.push(`</div></div>`);
   }
@@ -167,40 +302,85 @@ function panel(team, hl, isMe) {
 function render() {
   const other = T[sel.team];
   document.getElementById("h1").innerHTML = `${DATA.league} Trade Board <span class="call">${DATA.mode}</span>`;
-  document.getElementById("sub").textContent = `${DATA.season} · week ${DATA.week} · values as of ${DATA.asof} · ${me.name} vs ${other.name}`;
+  document.getElementById("sub").textContent = `${DATA.season} · week ${DATA.week} · values as of ${DATA.asof} · ${me.name} vs ${other.name}${handle(other) ? ` (${handle(other)})` : ""}`;
   document.getElementById("summary").innerHTML = `<b>The call: ${DATA.mode}.</b> ${DATA.call_text}<ul>${DATA.reasons.map(r => `<li>${r}</li>`).join("")}</ul>`;
   document.getElementById("note").textContent = DATA.note;
+
+  const view = sel.view === "compare" && DATA.deals.length ? "compare" : "board";
+  const views = document.getElementById("views");
+  views.hidden = !DATA.deals.length;
+  views.innerHTML = `<button class="view" role="tab" aria-selected="${view === "board"}" data-view="board">Trade board</button><button class="view" role="tab" aria-selected="${view === "compare"}" data-view="compare">All deals (${DATA.deals.length})</button>`;
+  views.querySelectorAll(".view").forEach(b => b.onclick = () => { sel.view = b.dataset.view; save(); render(); });
   const tabs = document.getElementById("tabs");
-  tabs.innerHTML = others.map(r => `<button class="tab" role="tab" aria-selected="${r === sel.team}" data-team="${r}">${T[r].name}${withDeals.includes(r) ? '<span class="dot"></span>' : ""}</button>`).join("");
-  tabs.querySelectorAll(".tab").forEach(b => b.onclick = () => { sel = {team: +b.dataset.team, deal: 0, v: null}; save(); render(); });
+  tabs.hidden = document.getElementById("board").hidden = view === "compare";
+  document.getElementById("compare").hidden = view !== "compare";
+  if (view === "compare") {
+    document.getElementById("sub").textContent = `${DATA.season} · week ${DATA.week} · values as of ${DATA.asof} · ${DATA.deals.length} deals across ${withDeals.length} teams`;
+    renderCompare();
+    return;
+  }
+
+  tabs.innerHTML = others.map(r => `<button class="tab" role="tab" aria-selected="${r === sel.team}" data-team="${r}">${T[r].name}${who(T[r])}${withDeals.includes(r) ? '<span class="dot"></span>' : ""}</button>`).join("");
+  tabs.querySelectorAll(".tab").forEach(b => b.onclick = () => { sel = {team: +b.dataset.team, deal: 0, v: null, view: "board", cmp: sel.cmp}; save(); render(); });
 
   const deals = dealsFor(other.rid);
   const deal = deals[sel.deal] || null;
   const vnames = deal ? Object.keys(deal.vars) : [];
   const v = deal ? (vnames.includes(sel.v) ? sel.v : (vnames.includes("Target") ? "Target" : vnames[0])) : null;
   const hl = {players: {}, picks: {}};
+  const custom = sel.custom || null;
   let sendItems = [], recvItems = [];
-  if (deal) {
+  if (custom) {
+    sendItems = custom.send.map(k => assetOf(me, k)).filter(Boolean);
+    recvItems = custom.recv.map(k => assetOf(other, k)).filter(Boolean);
+  } else if (deal) {
     const varItems = deal.vars[v].items;
     if (deal.fixed_side === "sends") { sendItems = deal.fixed; recvItems = varItems; } else { recvItems = deal.fixed; sendItems = varItems; }
-    for (const it of sendItems) if (it.kind === "player") hl.players[it.id] = "send"; else hl.picks[it.key] = "send";
-    for (const it of recvItems) if (it.kind === "player") hl.players[it.id] = "recv"; else hl.picks[it.key] = "recv";
   }
-  document.getElementById("left").innerHTML = panel(me, hl, true);
-  document.getElementById("right").innerHTML = panel(other, hl, false);
+  for (const it of sendItems) if (it.kind === "player") hl.players[it.id] = "send"; else hl.picks[it.key] = "send";
+  for (const it of recvItems) if (it.kind === "player") hl.players[it.id] = "recv"; else hl.picks[it.key] = "recv";
+  const left = document.getElementById("left"), right = document.getElementById("right");
+  left.innerHTML = panel(me, hl, true);
+  right.innerHTML = panel(other, hl, false);
+
+  // Clicking an asset forks the shown proposal into a custom trade (or edits the one already in progress).
+  const toggle = (side, key) => {
+    if (!sel.custom) sel.custom = {send: sendItems.map(keyOf), recv: recvItems.map(keyOf)};
+    const arr = sel.custom[side], i = arr.indexOf(key);
+    if (i >= 0) arr.splice(i, 1); else arr.push(key);
+    refocus = {side, key};
+    save(); render();
+  };
+  for (const [el, side] of [[left, "send"], [right, "recv"]]) {
+    el.querySelectorAll("[data-key]").forEach(n => {
+      n.onclick = () => toggle(side, n.dataset.key);
+      n.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(side, n.dataset.key); } };
+    });
+  }
+  if (refocus) {
+    const host = refocus.side === "send" ? left : right;
+    const n = host.querySelector(`[data-key="${CSS.escape(refocus.key)}"]`);
+    if (n && document.activeElement === document.body) n.focus({preventScroll: true});
+    refocus = null;
+  }
 
   const rail = document.getElementById("rail");
-  if (!deal) { rail.innerHTML = `<div class="panel"><h3>No deal drafted</h3><p class="note">Nothing drafted with ${other.name}: ${DATA.mode === "contend" ? "no older producer at your weak spots" : "not a contender with pick capital, or nothing on your sell list fits"}. Rosters shown for reference.</p></div>`; return; }
+  if (!deal && !custom) { rail.innerHTML = `<div class="panel"><h3>No deal drafted</h3><p class="note">Nothing drafted with ${other.name}${handle(other) ? ` (${handle(other)})` : ""}: ${DATA.mode === "contend" ? "no older producer at your weak spots" : "not a contender with pick capital, or nothing on your sell list fits"}.</p><p class="hint">Click players or picks on either roster to build your own trade.</p></div>`; return; }
   const sOut = sendItems.reduce((a, b) => a + b.value, 0), sIn = recvItems.reduce((a, b) => a + b.value, 0);
-  const pct = sOut ? Math.round(sIn / sOut * 100) : 0;
-  rail.innerHTML = `<div class="panel"><h3>Deals with ${other.name}</h3><div class="deals">${deals.map((d, i) => `<button class="deal" aria-selected="${i === sel.deal}" data-i="${i}">${d.title}<small>${d.fixed_side === "sends" ? d.fixed.map(x => x.label).join(", ") + " out" : d.fixed.map(x => x.label).join(", ") + " in"}</small></button>`).join("")}</div>
-    <div class="vars">${vnames.map(n => `<button class="var" aria-selected="${n === v}" data-v="${n}">${n}</button>`).join("")}</div>
-    <div class="side"><div class="lbl send"><span>You send</span><span>${fmt(sOut)}</span></div><ul>${sendItems.map(i => `<li><span>${i.label}</span><span>${fmt(i.value)}</span></li>`).join("")}</ul></div>
-    <div class="side"><div class="lbl recv"><span>You receive</span><span>${fmt(sIn)}</span></div><ul>${recvItems.map(i => `<li><span>${i.label}</span><span>${fmt(i.value)}</span></li>`).join("")}</ul></div>
-    <div class="tot"><span>Return on what you send</span><span class="big ${pct >= 100 ? "good" : (pct < 85 ? "bad" : "")}">${pct}%</span></div>
-    <div class="walk"><b>Walk away if</b> ${deal.walk}.</div></div>`;
-  rail.querySelectorAll(".deal").forEach(b => b.onclick = () => { sel.deal = +b.dataset.i; sel.v = null; save(); render(); });
-  rail.querySelectorAll(".var").forEach(b => b.onclick = () => { sel.v = b.dataset.v; save(); render(); });
+  const pct = sOut ? Math.round(sIn / sOut * 100) : null;
+  const list = items => items.length ? items.map(i => `<li><span>${i.label}</span><span>${fmt(i.value)}</span></li>`).join("") : `<li class="empty">nothing yet</li>`;
+  rail.innerHTML = `<div class="panel"><h3>${deals.length ? "Deals" : "Trade"} with ${other.name}${who(other)}</h3>
+    ${deals.length ? `<div class="deals">${deals.map((d, i) => `<button class="deal" aria-selected="${!custom && i === sel.deal}" data-i="${i}">${d.title}<small>${d.fixed_side === "sends" ? d.fixed.map(x => x.label).join(", ") + " out" : d.fixed.map(x => x.label).join(", ") + " in"}</small></button>`).join("")}</div>` : ""}
+    ${deal ? `<div class="vars${custom ? " custom" : ""}">${vnames.map(n => `<button class="var" aria-selected="${!custom && n === v}" data-v="${n}">${n}</button>`).join("")}</div>` : ""}
+    ${custom ? `<div class="custom-head"><span>Custom trade</span><button class="clear" type="button">Clear</button></div>` : ""}
+    <div class="side"><div class="lbl send"><span>You send</span><span>${fmt(sOut)}</span></div><ul>${list(sendItems)}</ul></div>
+    <div class="side"><div class="lbl recv"><span>You receive</span><span>${fmt(sIn)}</span></div><ul>${list(recvItems)}</ul></div>
+    <div class="tot"><span>Return on what you send</span><span class="big ${pct === null ? "" : (pct >= 100 ? "good" : (pct < 85 ? "bad" : ""))}">${pct === null ? "–" : pct + "%"}</span></div>
+    ${custom ? `<p class="hint">Click rows to add or remove assets.${deal ? " Pick Ask, Target or Floor to go back to the drafted deal." : ""}</p>` : `<div class="walk"><b>Walk away if</b> ${deal.walk}.</div><p class="hint">Click players or picks on either roster to adjust this trade.</p>`}</div>`;
+  rail.querySelectorAll(".deal").forEach(b => b.onclick = () => { sel.deal = +b.dataset.i; sel.v = null; sel.custom = null; save(); render(); });
+  rail.querySelectorAll(".var").forEach(b => b.onclick = () => { sel.v = b.dataset.v; sel.custom = null; save(); render(); });
+  const clear = rail.querySelector(".clear");
+  if (clear) clear.onclick = () => { sel.custom = {send: [], recv: []}; save(); render(); };
   sel.v = v;
 }
 render();
