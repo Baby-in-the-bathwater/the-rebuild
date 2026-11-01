@@ -40,7 +40,7 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .group{padding:8px 10px 2px}
 .gh{display:flex;align-items:center;gap:8px;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 4px 4px}
 .gh .bar{height:3px;flex:1;border-radius:2px;opacity:.85}
-.row{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 56px;gap:0 8px;align-items:center;padding:5px 4px;border-radius:6px;font-variant-numeric:tabular-nums}
+.row{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 40px 56px;gap:0 8px;align-items:center;padding:5px 4px;border-radius:6px;font-variant-numeric:tabular-nums}
 .row + .row{border-top:1px solid var(--line)}
 .row.hl{box-shadow:var(--glow);background:color-mix(in srgb,var(--accent) 12%,transparent);border-top-color:transparent}
 .row.hl.send{box-shadow:0 0 0 2px var(--send);background:color-mix(in srgb,var(--send) 14%,transparent)}
@@ -51,11 +51,12 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
 .nm small{color:var(--muted);font-weight:400;margin-left:5px}
 .tag{display:inline-block;font:700 10px var(--display);letter-spacing:.05em;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:1px}
-.tag.ir{background:var(--send);color:#fff}.tag.st{background:var(--line);color:var(--fg)}.tag.tx{background:var(--def);color:#fff}
+.tag.ir{background:var(--send);color:#fff}.tag.bl{background:var(--recv);color:#0b0e14}.tag.sh{background:var(--te);color:#0b0e14}
+.num.pv.up{color:var(--recv)}.num.pv.down{color:var(--te)}.num.pv.tagged{font-weight:700}.tag.st{background:var(--line);color:var(--fg)}.tag.tx{background:var(--def);color:#fff}
 .num{color:var(--muted);font-size:12px;text-align:right}
 .num.val{font-family:var(--mono);color:var(--fg);font-size:12px}
 .num.ppg.good{color:var(--recv);font-weight:600}
-.cols{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 56px;gap:0 8px;padding:8px 14px 0;font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cols{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 40px 56px;gap:0 8px;padding:8px 14px 0;font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .cols span:nth-child(n+3){text-align:right}
 .picks{padding:10px 10px 12px}
 .season{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;align-items:start;padding:5px 4px}
@@ -146,6 +147,46 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .dcard footer{padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 .dcard footer b{color:var(--fg)}
 @media (max-width:760px){.vgrid{grid-template-columns:1fr}.vcol + .vcol{border-left:0;border-top:1px solid var(--line)}.dcard > header{grid-template-columns:auto minmax(0,1fr)}.dcard .open{grid-column:1 / -1;justify-self:start}}
+/* league trade history */
+.hsec{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:12px}
+.hsec h2{font-size:22px;text-transform:uppercase;line-height:1}
+.hsec > .hint{margin:6px 0 0;max-width:80ch}
+.tw{overflow-x:auto;margin-top:10px}
+.ht{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.ht th{font:700 11px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.ht th:first-child,.ht td:first-child,.ht th.l{text-align:left}
+.ht th button{all:unset;cursor:pointer}.ht th button:focus-visible{outline:2px solid var(--accent)}
+.ht th[aria-sort] button{color:var(--accent)}
+.ht td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.ht tr:last-child td{border-bottom:0}
+.ht td.l{text-align:left;white-space:normal}
+.ht td small{color:var(--muted);display:block;font-size:11px}
+.ht .good{color:var(--recv);font-weight:600}.ht .bad{color:var(--send);font-weight:600}.ht .mid{color:var(--muted)}
+.ht tbody tr.me td{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.ht.lb tbody tr{cursor:pointer}.ht.lb tbody tr:hover td{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+.ht.lb tbody tr.on td{box-shadow:inset 0 -2px 0 var(--accent)}
+.tlist{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.tcard{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel2)}
+.tcard.mine{border-color:var(--accent)}
+.tcard > header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.tcard > header b{color:var(--fg);font-weight:600}
+.vbadge{font:700 11px var(--display);letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:4px;background:var(--line);color:var(--fg)}
+.vbadge.win{background:var(--recv);color:#0b0e14}
+.tsides{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.tside{padding:10px 12px;min-width:0;background:var(--panel)}
+.tside + .tside{border-left:1px solid var(--line)}
+.tside.won{box-shadow:inset 3px 0 0 var(--recv)}
+.tsh{font-size:13px}.tsh b{font-weight:600}.tsh small{color:var(--muted)}
+.tside ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:3px}
+.tside li{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:6px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums}
+.tside li .badge{font-size:10px;padding:2px 0}
+.tside li .lb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tside li .lb small{color:var(--muted);margin-left:4px}
+.tside li .vv{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.tside li .vv b{color:var(--fg);font-weight:500}
+.tst{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin-top:8px;padding-top:6px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tst b{color:var(--fg);font-weight:600}.tst .good{color:var(--recv)}.tst .bad{color:var(--send)}
+@media (max-width:620px){.tside + .tside{border-left:0;border-top:1px solid var(--line)}}
 [hidden]{display:none !important}
 @media (prefers-reduced-motion:no-preference){.row,.chip{transition:box-shadow .15s,background .15s}}
 </style>
@@ -158,6 +199,7 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 <div class="summary" id="summary"></div>
 <div class="views" id="views" role="tablist" aria-label="View"></div>
 <section id="compare" aria-label="All proposed deals" hidden></section>
+<section id="history" aria-label="League trade history" hidden></section>
 <div class="tabs" id="tabs" role="tablist" aria-label="Counterparty"></div>
 <div class="board" id="board">
   <section class="panel" id="left" aria-label="Your roster"></section>
@@ -261,7 +303,7 @@ function renderCompare() {
   el.querySelector("#cmp-asset").onchange = e => { cmp.asset = e.target.value; save(); render(); };
   el.querySelectorAll(".open").forEach(b => b.onclick = () => {
     const d = DATA.deals[+b.dataset.i];
-    sel = {team: d.cp_rid, deal: dealsFor(d.cp_rid).indexOf(d), v: null, custom: null, view: "board", cmp};
+    sel = {team: d.cp_rid, deal: dealsFor(d.cp_rid).indexOf(d), v: null, custom: null, view: "board", cmp, hist: sel.hist};
     save(); render();
     document.getElementById("board").scrollIntoView({behavior: "smooth", block: "start"});
   });
@@ -270,7 +312,7 @@ function renderCompare() {
 function panel(team, hl, isMe) {
   const h = [];
   h.push(`<div class="phead"><h2>${team.name}${who(team)}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span>${SEASONS.length ? `<span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span>` : ""}<span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(team.player_value)}</b></span><span>picks <b>${fmt(team.pick_value)}</b></span></div></div>`);
-  h.push(`<div class="cols"><span>Pos</span><span>Player</span><span>Team</span><span>Age</span><span>PPG</span><span>Value</span></div>`);
+  h.push(`<div class="cols"><span>Pos</span><span>Player</span><span>Team</span><span>Age</span><span>PPG</span><span title="Production vs price: rank at the position by PPG against rank by value. + produces better than priced.">P/V</span><span>Value</span></div>`);
   for (const pos of POS) {
     const ps = team.players.filter(p => p.pos === pos);
     if (!ps.length) continue;
@@ -278,7 +320,7 @@ function panel(team, hl, isMe) {
     for (const p of ps) {
       const m = hl.players[p.id];
       const cls = isMe && DATA.ledger[p.id] ? " " + DATA.ledger[p.id] : "";
-      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${p.id}" data-key="p:${p.id}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${p.name}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${p.inj}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}</span><span class="num">${p.team}</span><span class="num">${p.age ?? ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}</span><span class="num val">${p.value ? fmt(p.value) : "–"}</span></div>`);
+      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${p.id}" data-key="p:${p.id}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${p.name}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${p.inj}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}${p.sig && p.sig.tag === "buy" ? '<span class="tag bl">BUY LOW</span>' : ""}${p.sig && p.sig.tag === "sell" ? '<span class="tag sh">SELL HIGH</span>' : ""}</span><span class="num">${p.team}</span><span class="num">${p.age ?? ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}</span>${pvCell(p)}<span class="num val">${p.value ? fmt(p.value) : "–"}</span></div>`);
     }
     h.push(`</div>`);
   }
@@ -299,6 +341,93 @@ function panel(team, hl, isMe) {
   return h.join("");
 }
 
+function pvCell(p) {
+  const s = p.sig;
+  if (!s) return `<span class="num pv" title="Fewer than 4 games with points: no production read yet">–</span>`;
+  const dir = s.gap > 0 ? " up" : (s.gap < 0 ? " down" : "");
+  const tip = `${p.pos}${s.prod} by PPG, ${p.pos}${s.price} by value (of ${s.n} rostered ${p.pos}s with 4+ games)`;
+  return `<span class="num pv${dir}${s.tag ? " tagged" : ""}" title="${tip}">${s.gap > 0 ? "+" : ""}${s.gap}</span>`;
+}
+
+// League trades view: how the league prices things, who trades well, and every trade priced then and now.
+const sgn = n => (n > 0 ? "+" : n < 0 ? "−" : "") + fmt(Math.abs(Math.round(n)));
+const pctCls = p => (p === null || p === undefined ? "mid" : p >= 108 ? "good" : p <= 92 ? "bad" : "mid");
+function renderHistory() {
+  const H = DATA.trade_history, st = sel.hist || (sel.hist = {sort: "net_now", dir: -1, uid: "all", season: "all"});
+  const el = document.getElementById("history");
+  const h = [];
+
+  // 1. how the league prices things
+  const M = H.market;
+  const mrow = (label, r) => `<tr><td class="l">${label}</td><td>${r.trades}</td><td>${r.value !== undefined ? fmt(r.value) : ""}</td><td class="${pctCls(r.pct)}">${r.pct === null ? "–" : r.pct + "%"}</td><td class="l">${r.read}</td></tr>`;
+  h.push(`<div class="hsec"><h2>How this league trades</h2>
+    <p class="hint">For each kind of asset, what sellers got back, against the DynastyProcess value the week of the trade (${M.trades} two-team trades). Over 100%: this league pays more than market, so it is a good thing to sell here. Under 100%: it goes cheap here, so it is a good thing to buy. Fewer than 5 trades is marked thin.</p>
+    <div class="tw"><table class="ht"><thead><tr><th>When someone sells</th><th>Trades</th><th>Value sold</th><th>Got back</th><th class="l">Read</th></tr></thead><tbody>
+    ${M.rows.map(r => mrow(r.label, r)).join("")}
+    ${mrow("A stud for 2+ smaller pieces", {...M.consolidation, value: undefined})}
+    </tbody></table></div>
+    <p class="hint">Later-round picks are mostly throw-ins, so their number moves with whatever deal they were added to. Each side's return is spread over what it sent by value, so one lopsided trade can tilt a small category.</p></div>`);
+
+  // 2. who trades well
+  const cols = [["manager", "Manager", 1], ["trades", "Trades", -1], ["won", "Won-lost-even", -1], ["pct_then", "Return at trade", -1], ["net_then", "Net value at trade", -1], ["net_now", "Net value today", -1], ["pts", "Net starter pts", -1]];
+  const rows = [...H.managers].sort((a, b) => {
+    const k = st.sort, av = a[k] ?? -Infinity, bv = b[k] ?? -Infinity;
+    return (typeof av === "string" ? av.localeCompare(bv) : (av - bv)) * st.dir;
+  });
+  h.push(`<div class="hsec"><h2>Who trades well</h2>
+    <p class="hint">Won-lost-even uses today's values: a side wins when it got 10% and 150+ value more than it gave. Return at trade is everything received over everything sent, at the values of each trade's week. Net starter points: what a manager's acquisitions scored in their starting lineup since, minus what they gave up scored in the other team's. Click a manager to filter the trades below.</p>
+    <div class="tw"><table class="ht lb"><thead><tr>${cols.map(([k, l, d]) => `<th${st.sort === k ? ` aria-sort="${st.dir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-k="${k}" data-d="${d}">${l}${st.sort === k ? (st.dir > 0 ? " ▲" : " ▼") : ""}</button></th>`).join("")}</tr></thead><tbody>
+    ${rows.map(r => `<tr data-uid="${r.uid}" class="${r.uid === DATA.me_uid ? "me" : ""}${st.uid === r.uid ? " on" : ""}"><td class="l"><b>${r.manager}</b>${r.uid === DATA.me_uid ? ' <span style="color:var(--accent)">· you</span>' : ""}<small>${r.teams.filter(t => t !== r.manager).join(" · ")}</small></td>
+      <td>${r.trades}</td><td>${r.won}-${r.lost}-${r.even}</td><td class="${pctCls(r.pct_then)}">${r.pct_then === null ? "–" : r.pct_then + "%"}</td>
+      <td class="${r.net_then > 0 ? "good" : r.net_then < 0 ? "bad" : "mid"}">${sgn(r.net_then)}</td><td class="${r.net_now > 0 ? "good" : r.net_now < 0 ? "bad" : "mid"}">${sgn(r.net_now)}</td>
+      <td class="${r.pts > 0 ? "good" : r.pts < 0 ? "bad" : "mid"}">${sgn(r.pts)}</td></tr>`).join("")}
+    </tbody></table></div></div>`);
+
+  // 3. every trade
+  const seasons = [...new Set(H.trades.map(t => t.season))].sort((a, b) => b - a);
+  const opt = (v, label, cur) => `<option value="${v}"${String(v) === String(cur) ? " selected" : ""}>${label}</option>`;
+  let list = H.trades;
+  if (st.uid !== "all") list = list.filter(t => t.sides.some(s => s.uid === st.uid));
+  if (st.season !== "all") list = list.filter(t => String(t.season) === String(st.season));
+  const mgrs = [...H.managers].sort((a, b) => a.manager.localeCompare(b.manager));
+  h.push(`<div class="hsec"><h2>Trades</h2><div class="ctl">
+    <label>Manager <select id="h-uid">${opt("all", "Everyone", st.uid)}${mgrs.map(m => opt(m.uid, `${m.manager} (${m.trades})`, st.uid)).join("")}</select></label>
+    <label>Season <select id="h-season">${opt("all", "All", st.season)}${seasons.map(y => opt(y, y, st.season)).join("")}</select></label>
+    <span>${list.length} trade${list.length === 1 ? "" : "s"} · values shown as then → today</span></div><div class="tlist">`);
+  const itemLi = a => {
+    if (a.kind === "player") return `<li><span class="badge" style="background:${PC[a.pos] || "var(--k)"}">${a.pos}</span><span class="lb">${a.label}${a.age ? `<small>${Math.floor(a.age)}</small>` : ""}</span><span class="vv">${fmt(a.then)} → <b>${fmt(a.now)}</b></span></li>`;
+    return `<li><span class="badge" style="background:${a.round === 1 ? "var(--accent)" : "var(--pick)"}">R${a.round}</span><span class="lb">${a.label}${a.became ? `<small>→ ${a.became}</small>` : ""}</span><span class="vv">${fmt(a.then)} → <b>${fmt(a.now)}</b></span></li>`;
+  };
+  for (const t of list) {
+    const byRid = Object.fromEntries(t.sides.map(s => [s.rid, s]));
+    const wNow = t.winner_now != null ? byRid[t.winner_now] : null, wThen = t.winner_then != null ? byRid[t.winner_then] : null;
+    const early = t.days_ago < 56;
+    const mine = t.sides.some(s => s.uid === DATA.me_uid);
+    h.push(`<article class="tcard${mine ? " mine" : ""}"><header><span><b>${t.date}</b> · ${t.season} week ${t.week} · values of ${t.values_asof}</span>
+      <span>${wThen ? `${wThen.manager} won at the time` : "Fair at the time"} · <span class="vbadge${wNow ? " win" : ""}">${wNow ? `${wNow.manager} wins today` : "Even today"}${early ? " (early)" : ""}</span></span></header><div class="tsides">`);
+    for (const s of t.sides) {
+      h.push(`<div class="tside${wNow && wNow === s ? " won" : ""}"><div class="tsh"><b>${s.team}</b>${s.team !== s.manager ? ` <small>(${s.manager})</small>` : ""} <small>gets</small></div>
+        <ul>${s.gets.map(itemLi).join("") || '<li><span></span><span class="lb" style="color:var(--muted)">nothing</span><span></span></li>'}</ul>
+        ${s.faab ? `<div class="hint">${s.faab > 0 ? "+" : "−"}$${Math.abs(s.faab)} FAAB (not valued)</div>` : ""}
+        <div class="tst"><span>At the time</span><span><b>${fmt(s.got_then)}</b> for ${fmt(s.gave_then)} · <span class="${pctCls(s.pct_then)}">${s.pct_then === null ? "–" : s.pct_then + "%"}</span></span>
+        <span>Today</span><span><b>${fmt(s.got_now)}</b> for ${fmt(s.gave_now)} · <span class="${pctCls(s.pct_now)}">${s.pct_now === null ? "–" : s.pct_now + "%"}</span></span>
+        <span>Starter pts</span><span><b>${s.pts.toFixed(1)}</b> since, for this team</span></div></div>`);
+    }
+    h.push(`</div></article>`);
+  }
+  h.push(`</div><p class="hint">Picks are priced at the time by their exact slot when that draft was next, mid-round the season after, flat beyond. Today a drafted pick is worth the player taken with it; an undrafted one is priced like the board's picks. FAAB is not valued. Values only: a deal that won a title can still lose on today's values.</p></div>`);
+  el.innerHTML = h.join("");
+
+  el.querySelectorAll(".ht.lb th button").forEach(b => b.onclick = () => {
+    const k = b.dataset.k;
+    st.dir = st.sort === k ? -st.dir : +b.dataset.d;
+    st.sort = k; save(); render();
+  });
+  el.querySelectorAll(".ht.lb tbody tr").forEach(r => r.onclick = () => { st.uid = st.uid === r.dataset.uid ? "all" : r.dataset.uid; save(); render(); });
+  el.querySelector("#h-uid").onchange = e => { st.uid = e.target.value; save(); render(); };
+  el.querySelector("#h-season").onchange = e => { st.season = e.target.value; save(); render(); };
+}
+
 function render() {
   const other = T[sel.team];
   document.getElementById("h1").innerHTML = `${DATA.league} Trade Board <span class="call">${DATA.mode}</span>`;
@@ -306,22 +435,32 @@ function render() {
   document.getElementById("summary").innerHTML = `<b>The call: ${DATA.mode}.</b> ${DATA.call_text}<ul>${DATA.reasons.map(r => `<li>${r}</li>`).join("")}</ul>`;
   document.getElementById("note").textContent = DATA.note;
 
-  const view = sel.view === "compare" && DATA.deals.length ? "compare" : "board";
+  const TH_ = DATA.trade_history, nHist = TH_ ? TH_.trades.length : 0;
+  const view = (sel.view === "compare" && DATA.deals.length) ? "compare" : (sel.view === "history" && nHist) ? "history" : "board";
   const views = document.getElementById("views");
-  views.hidden = !DATA.deals.length;
-  views.innerHTML = `<button class="view" role="tab" aria-selected="${view === "board"}" data-view="board">Trade board</button><button class="view" role="tab" aria-selected="${view === "compare"}" data-view="compare">All deals (${DATA.deals.length})</button>`;
+  views.hidden = !DATA.deals.length && !nHist;
+  views.innerHTML = `<button class="view" role="tab" aria-selected="${view === "board"}" data-view="board">Trade board</button>`
+    + (DATA.deals.length ? `<button class="view" role="tab" aria-selected="${view === "compare"}" data-view="compare">All deals (${DATA.deals.length})</button>` : "")
+    + (nHist ? `<button class="view" role="tab" aria-selected="${view === "history"}" data-view="history">League trades (${nHist})</button>` : "");
   views.querySelectorAll(".view").forEach(b => b.onclick = () => { sel.view = b.dataset.view; save(); render(); });
   const tabs = document.getElementById("tabs");
-  tabs.hidden = document.getElementById("board").hidden = view === "compare";
+  tabs.hidden = document.getElementById("board").hidden = view !== "board";
   document.getElementById("compare").hidden = view !== "compare";
+  document.getElementById("history").hidden = view !== "history";
   if (view === "compare") {
     document.getElementById("sub").textContent = `${DATA.season} · week ${DATA.week} · values as of ${DATA.asof} · ${DATA.deals.length} deals across ${withDeals.length} teams`;
     renderCompare();
     return;
   }
+  if (view === "history") {
+    const yrs = [...new Set(TH_.trades.map(t => t.season))].sort();
+    document.getElementById("sub").textContent = `${nHist} trades, ${yrs[0]} to ${yrs[yrs.length - 1]} · each priced with the DynastyProcess values of its week, and with today's (${TH_.values_now})`;
+    renderHistory();
+    return;
+  }
 
   tabs.innerHTML = others.map(r => `<button class="tab" role="tab" aria-selected="${r === sel.team}" data-team="${r}">${T[r].name}${who(T[r])}${withDeals.includes(r) ? '<span class="dot"></span>' : ""}</button>`).join("");
-  tabs.querySelectorAll(".tab").forEach(b => b.onclick = () => { sel = {team: +b.dataset.team, deal: 0, v: null, view: "board", cmp: sel.cmp}; save(); render(); });
+  tabs.querySelectorAll(".tab").forEach(b => b.onclick = () => { sel = {team: +b.dataset.team, deal: 0, v: null, view: "board", cmp: sel.cmp, hist: sel.hist}; save(); render(); });
 
   const deals = dealsFor(other.rid);
   const deal = deals[sel.deal] || null;

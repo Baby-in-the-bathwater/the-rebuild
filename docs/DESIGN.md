@@ -78,7 +78,15 @@ Deals are ordered by the size of the asset, then by the quality of the return (p
 
 ## Trade board
 
-One HTML file. Your roster pinned left with SELL / HOLD tags, a tab per team (teams with drafted deals first), the deal rail between them with Ask / Target / Floor (or Open / Target / Ceiling for a buy) variants that highlight what you send (red) and receive (green) on both rosters and show the value return. Dark-first with a light palette for light-mode viewers. State (selected team, deal, variant) lives in `localStorage` only.
+One HTML file. Your roster pinned left with SELL / HOLD tags, a tab per team (teams with drafted deals first), the deal rail between them with Ask / Target / Floor (or Open / Target / Ceiling for a buy) variants that highlight what you send (red) and receive (green) on both rosters and show the value return. Dark-first with a light palette for light-mode viewers. State (selected team, deal, variant, view, filters, custom trade) lives in `localStorage` only.
+
+Clicking any player row or pick chip forks the shown deal into a custom trade (your roster feeds the send side, the counterparty's the receive side); the variant buttons go inactive and reset to the drafted deal. Team names carry the manager's Sleeper username, since DMs go by username.
+
+**All deals** lists every drafted deal as a card with its variants side by side, in the brief's ranked order, sortable by return, value or team and filterable by the asset.
+
+**P/V (production vs price)**: among rostered players at a position with 4+ games with points, a player's rank by points per game against his rank by value; the gap shows on every row. Tags split on the sell age: BUY LOW is a startable player under it producing at least twice as well as priced (and 6+ spots better); SELL HIGH is a player at or past it, worth 900+, not on IR, priced at least twice as well as producing. Old players producing cheaply and young players priced on their future show in the gap but are not tagged.
+
+**League trades** (`trade_history.py`): every completed trade across the league's seasons, each side priced with the DynastyProcess snapshot committed the week of the trade (the data repo commits `values.csv` weekly; snapshots are immutable and cached under `cache/dp_history/`) and with today's values. Picks then: the exact slot when that draft was next, the Mid tier the season after, flat or discounted beyond. Picks now: the value today of the player drafted with it (the original owner comes from the draft order; Sleeper's pick `roster_id` is the picker), or the board's pick price if undrafted. A side wins when it is ahead by 10% of the larger side and 150+ value; otherwise even. Starter points: points the received players (or drafted players) scored in that roster's starting lineup from the trade week on. Managers are keyed by Sleeper user id. The market table credits each two-team side's return (received / sent, at trade time) to what it sent, by value share, and averages by category; 108%+ reads as a premium, 92% or under as below market, under 5 trades as thin. Consolidation is the return to the side that sold the single best asset for more pieces. FAAB is shown, not valued.
 
 ## What it does not do
 

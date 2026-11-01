@@ -14,6 +14,7 @@ import webbrowser
 from . import benchmarks as bmod
 from . import pdf as pdfmod
 from . import board, report
+from . import trade_history as thmod
 from .crawl import crawl_lineages, discover_pool, load_bundles, walk_lineage
 from .grade import grade
 from .league import League, fmt_key
@@ -36,6 +37,7 @@ def main(argv=None):
     ap.add_argument("--crawl-seconds", type=int, default=600, help="time cap for pool discovery (default 600)")
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--no-history", action="store_true", help="skip the league's own previous-season walk")
+    ap.add_argument("--no-trade-history", action="store_true", help="skip pricing the league's past trades with historical values")
     ap.add_argument("--refresh-values", action="store_true", help="re-download the values feed even if cached today")
     ap.add_argument("--pdf", action="store_true", help="also render brief.pdf (needs Chrome, Chromium or Edge installed)")
     ap.add_argument("--open", action="store_true", help="open the trade board in the browser when done")
@@ -113,8 +115,15 @@ def main(argv=None):
     lineage = report.lineage_table(own_bundles, chain, league.pdb, rid, league) if not a.no_history else []
 
     # outputs
+    th = None
+    if not a.no_trade_history:
+        log("pricing the league's trade history")
+        try:
+            th = thmod.build(a.cache_dir, own_bundles, league, values, log=log)
+        except Exception as e:  # network or GitHub rate limit: the rest of the run does not depend on it
+            log(f"trade history skipped: {e}")
     ct = report.call_text(g, league, bm, assets)
-    data = board.board_data(league, values, g, assets, ds, ct)
+    data = board.board_data(league, values, g, assets, ds, ct, trade_history=th)
     html = board.render(data, os.path.join(out, "trade-board.html"))
     md = report.write(os.path.join(out, "brief.md"), league, values, g, assets, ds, bm, lineage, shipped_note)
     pdf_path = None
