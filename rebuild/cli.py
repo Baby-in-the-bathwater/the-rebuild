@@ -19,7 +19,7 @@ from .crawl import crawl_lineages, discover_pool, load_bundles, walk_lineage
 from .grade import grade
 from .league import League, fmt_key
 from .sleeper import Sleeper
-from .trades import classify_assets, deals
+from .trades import classify_assets, deals, three_team_deals
 from .values import Values
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -112,6 +112,9 @@ def main(argv=None):
     log(f"ledger: sell {len(assets['sell'])}, hold {len(assets['hold'])}, keep {len(assets['keep'])}")
     ds = deals(g, league, assets, g["mode"])
     log(f"deals: {len(ds)} across {len({d['counterparty'] for d in ds})} counterparties")
+    multi = three_team_deals(g, league, assets, g["mode"])
+    if multi:
+        log(f"three-team deals: {len(multi)}")
     lineage = report.lineage_table(own_bundles, chain, league.pdb, rid, league) if not a.no_history else []
 
     # outputs
@@ -123,9 +126,9 @@ def main(argv=None):
         except Exception as e:  # network or GitHub rate limit: the rest of the run does not depend on it
             log(f"trade history skipped: {e}")
     ct = report.call_text(g, league, bm, assets)
-    data = board.board_data(league, values, g, assets, ds, ct, trade_history=th)
+    data = board.board_data(league, values, g, assets, ds, ct, trade_history=th, multi=multi)
     html = board.render(data, os.path.join(out, "trade-board.html"))
-    md = report.write(os.path.join(out, "brief.md"), league, values, g, assets, ds, bm, lineage, shipped_note)
+    md = report.write(os.path.join(out, "brief.md"), league, values, g, assets, ds, bm, lineage, shipped_note, multi=multi)
     pdf_path = None
     if a.pdf:
         pdf_path, why = pdfmod.render(md, os.path.join(out, "brief.pdf"))

@@ -250,6 +250,14 @@ def buy_deals(g, league, me, mode, max_counterparties=6):
     return out
 
 
+def return_quality(items, sell_value, fit):
+    """Quality of a sell return, not its size: preference per piece, need fit, firsts in the next two drafts."""
+    total = sum(i["value"] for i in items)
+    return (sum(i["pref"] for i in items) / len(items) + 0.4 * fit
+            + 0.15 * sum(1 for i in items if i["kind"] == "pick" and i["pref"] >= 3.0)
+            + 0.05 * min(total / sell_value, 1.1))
+
+
 def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=None, deals_per_asset=4):
     me = g["team"]
     out = []
@@ -269,10 +277,7 @@ def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=None, deal
                 best = max(vars_["Target"]["items"], key=lambda i: (i["pref"], i["value"]))
                 fit = 1.0 if sell["pos"] in needs[:2] else 0.0
                 tgt = vars_["Target"]["items"]
-                # quality of the return, not its size: preference per piece, need fit, firsts in the next two drafts
-                score = (sum(i["pref"] for i in tgt) / len(tgt) + 0.4 * fit
-                         + 0.15 * sum(1 for i in tgt if i["kind"] == "pick" and i["pref"] >= 3.0)
-                         + 0.05 * min(vars_["Target"]["value"] / sell["value"], 1.1))
+                score = return_quality(tgt, sell["value"], fit)
                 out.append({"counterparty": t["name"], "cp_rid": t["rid"], "title": f"{sell['name']} to {t['name']}" + (f" (needs {sell['pos']})" if fit else ""),
                             "sends": [{"kind": "player", "id": sell["id"], "label": f"{sell['name']} ({sell['pos']}, {sell['age']})", "value": sell["value"]}],
                             "vars": vars_, "walk": f"the {best['label']} is not in it, or the return falls under {int(sell['value'] * FLOOR):,}",
@@ -291,3 +296,106 @@ def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=None, deal
         per_asset[d["asset"]] = per_asset.get(d["asset"], 0) + 1
         kept.append(d)
     return kept
+
+
+# ------------------------------------------------------------------ three-team deals
+THREE_MIN_SHARE = 0.15   # the third team must pay at least this share of the sell asset, or it is a two-team deal
+THREE_FAIR = (0.87, 1.15)  # every other team's return (received / sent) must land in this band
+THREE_EDGE = 0.10        # and the return must beat the best two-team package from the same buyer by this much
+
+
+def _bridge_items(team, mode, league, wanted_keys):
+    """A buyer's players a rebuilder does not want back (past 25, or simply not in its wanted list): the pieces
+    a third team might take instead."""
+    out = []
+    for p in team["players"]:
+        if p["pos"] not in TH or p["value"] < MIN_PACKAGE_PIECE or p["id"] in wanted_keys:
+            continue
+        out.append({"kind": "player", "id": p["id"], "value": p["value"], "pos": p["pos"], "age": p["age"], "startable": p["startable"],
+                    "label": f"{p['name']} ({p['pos']}, {p['age'] or '?'})"})
+    return out
+
+
+def three_team_deals(g, league, assets, mode, per_asset=2, max_total=8, max_buyers=6):
+    """Sell deals routed through a third team. You send a sell asset to buyer A; A pays part of it in what you want
+    (near-term firsts, young players) and sends players you do not want to team B; B, which wants them, pays you
+    the rest in picks or youth. Kept only when every other team comes out near fair at market value and your
+    return is better than the best two-team package A alone could send."""
+    if mode not in ("rebuild", "retool"):
+        return []
+    me = g["team"]
+    n = g["n"]
+    buyers = counterparties(g, league, mode)[:max_buyers]
+    found = []
+    for sell in assets["sell"]:
+        S = sell["value"]
+        for A, a_needs in buyers:
+            a_want = tradeable(A, mode, league)
+            wanted = {i.get("id") for i in a_want if i["kind"] == "player"}
+            bridge_base = _bridge_items(A, mode, league, wanted)
+            if not bridge_base:
+                continue
+            fit_a = 1.0 if sell["pos"] in a_needs[:2] else 0.0
+            # the best A can do alone, scored the same way, is the bar a three-team deal has to clear
+            two, two_v = build_package(a_want, S) if a_want else ([], 0)
+            bar = return_quality(two, S, fit_a) if two and two_v >= S * FLOOR else -1.0
+            # what you take from A: its one or two most-wanted pieces, as long as they leave room for a third team
+            top = sorted(a_want, key=lambda i: (-i["pref"], -i["value"]))[:8]
+            xs = [[i] for i in top] + [[a, b] for k, a in enumerate(top) for b in top[k + 1:]]
+            xs = [x for x in xs if sum(i["value"] for i in x) <= S * (1 - THREE_MIN_SHARE)]
+            for B in g["teams"].values():
+                if B["rid"] in (me["rid"], A["rid"]):
+                    continue
+                b_needs = positional_need(g["rows"], B["rid"])
+                contending = B["rank"] <= n // 2 + 1
+                b_want = tradeable(B, mode, league)
+                if not b_want:
+                    continue
+                # what B takes from A: scored by B's weakest spots, a contender's taste for producers, and A's redundancy at the sell position
+                bridge = [dict(i, pref=1.0 + (1.0 if i["pos"] in b_needs[:2] else 0.0) + (0.4 if contending and i["startable"] else 0.0)
+                               + (0.5 if i["pos"] == sell["pos"] else 0.0)) for i in bridge_base]
+                best = None
+                for X in xs:
+                    vX = sum(i["value"] for i in X)
+                    Y, vY = build_package(b_want, S - vX, max_pieces=2)
+                    if not Y or vX + vY < S * 0.97 or vX + vY > S * 1.2:
+                        continue
+                    Z, vZ = build_package(bridge, vY, max_pieces=3)
+                    if not Z or not (THREE_FAIR[0] <= vZ / vY <= THREE_FAIR[1]):
+                        continue
+                    a_ret = S / (vX + vZ)
+                    if not (THREE_FAIR[0] <= a_ret <= THREE_FAIR[1]):
+                        continue
+                    if not contending and not any(i["pos"] in b_needs[:2] for i in Z):
+                        continue   # B takes A's players only if it is contending or they fill a hole
+                    mine = X + Y
+                    score = return_quality(mine, S, fit_a) + 0.2 * (1.0 if any(i["pos"] in b_needs[:2] for i in Z) else 0.0)
+                    if score < bar + THREE_EDGE:
+                        continue
+                    if best is None or score > best[0]:
+                        best = (score, X, vX, Y, vY, Z, vZ)
+                if best:
+                    found.append((sell, A, B, b_needs, fit_a, bar) + best)
+    # rank by the quality of your return; keep a few per sell asset, each with a different buyer
+    found.sort(key=lambda f: -f[6])
+    out, per, seen = [], {}, set()
+    for sell, A, B, b_needs, fit_a, bar, score, X, vX, Y, vY, Z, vZ in found:
+        if per.get(sell["id"], 0) >= per_asset or (sell["id"], A["rid"]) in seen:
+            continue
+        per[sell["id"]] = per.get(sell["id"], 0) + 1
+        seen.add((sell["id"], A["rid"]))
+        S = sell["value"]
+        mv = lambda i, frm, to: {k: i[k] for k in ("kind", "label", "value") if k in i} | ({"id": i["id"]} if i["kind"] == "player" else {"key": i["key"]}) | {"from": frm, "to": to}  # noqa: E731
+        sell_item = {"kind": "player", "id": sell["id"], "label": f"{sell['name']} ({sell['pos']}, {sell['age']})", "value": S}
+        moves = ([mv(sell_item, me["rid"], A["rid"])] + [mv(i, A["rid"], me["rid"]) for i in X]
+                 + [mv(i, B["rid"], me["rid"]) for i in Y] + [mv(i, A["rid"], B["rid"]) for i in Z])
+        holes = sorted({i["pos"] for i in Z if i["pos"] in b_needs[:2]})
+        why = (f"{A['name']} can cover {round(vX / S * 100)}% of {sell['name']} in what you want. "
+               f"{B['name']} pays the rest for {', '.join(i['label'].split(' (')[0] for i in Z)}"
+               + (f", filling its {'/'.join(holes)} hole." if holes else ", depth for a contender.")
+               + (" Beats the best two-team package from " + A["name"] + "." if bar >= 0 else f" {A['name']} cannot reach {sell['name']}'s value alone in pieces you want."))
+        out.append({"multi": True, "title": f"{sell['name']} to {A['name']}, with {B['name']}", "asset": sell["name"],
+                    "teams": [me["rid"], A["rid"], B["rid"]], "moves": moves, "why": why, "score": round(score, 3)})
+        if len(out) >= max_total:
+            break
+    return out
