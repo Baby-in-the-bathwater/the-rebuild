@@ -7,6 +7,7 @@ from .grade import SELL_AGE
 from .metrics import TH
 
 TEMPLATE = os.path.join(os.path.dirname(__file__), "templates", "trade_board.html")
+WEIGHTS_JS = os.path.join(os.path.dirname(TEMPLATE), "board_weights.js")
 
 
 def _item(i):
@@ -86,6 +87,8 @@ def board_data(league, values, g, assets, deals, call_text, trade_history=None, 
 def render(data, out_path):
     with open(TEMPLATE, encoding="utf-8") as f:
         html = f.read()
+    with open(WEIGHTS_JS, encoding="utf-8") as f:
+        html = html.replace("/*__WEIGHTS_JS__*/", f.read())
     html = html.replace("__TITLE__", f"{data['league']} Trade Board").replace("/*__DATA__*/null", json.dumps(data))
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
