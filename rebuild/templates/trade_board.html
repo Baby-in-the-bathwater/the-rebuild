@@ -751,7 +751,7 @@ function render() {
 function buildWeights() {
   const el = document.getElementById("weights"), w = W();
   el.innerHTML = `<label class="tog"><input type="checkbox" id="w-on"${w.on ? " checked" : ""}>Custom league weights</label>
-    <span class="wctl wset"><label for="w-steep">Steepness</label><input type="range" id="w-steep" min="0.005" max="0.035" step="0.0005" value="${w.steepness}"><b id="w-steep-v"></b><span class="dp">DP 0.0235</span></span>
+    <span class="wctl wset" title="How fast value falls off down the rankings. Lower narrows the gap between stars and depth, higher widens it. DynastyProcess uses 0.0235; every value on the board is re-priced on this curve."><label for="w-steep">Steepness</label><input type="range" id="w-steep" min="0.005" max="0.035" step="0.0005" value="${w.steepness}"><b id="w-steep-v"></b><span class="dp">DP 0.0235</span></span>
     ${TEAM_TYPES.map(t => `<span class="wctl rate wset" title="Value per weekly point a trade adds to or costs a ${t} team's best lineup"><label for="w-rate-${t}">${t[0].toUpperCase() + t.slice(1)}</label><input type="range" id="w-rate-${t}" min="0" max="1000" step="10" value="${w.rates[t]}"><b id="w-rate-${t}-v"></b></span>`).join("")}
     <span class="dp wset">per lineup point</span>
     <button type="button" class="reset wset" id="w-reset">Reset</button>`;
