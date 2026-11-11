@@ -369,9 +369,11 @@ def three_team_deals(g, league, assets, mode, per_asset=2, max_total=8, max_buye
                     if not contending and not any(i["pos"] in b_needs[:2] for i in Z):
                         continue   # B takes A's players only if it is contending or they fill a hole
                     mine = X + Y
-                    score = return_quality(mine, S, fit_a) + 0.2 * (1.0 if any(i["pos"] in b_needs[:2] for i in Z) else 0.0)
-                    if score < bar + THREE_EDGE:
+                    # the bar is your return alone; the bonus for filling B's hole only ranks deals that already clear it
+                    quality = return_quality(mine, S, fit_a)
+                    if quality < bar + THREE_EDGE:
                         continue
+                    score = quality + 0.2 * (1.0 if any(i["pos"] in b_needs[:2] for i in Z) else 0.0)
                     if best is None or score > best[0]:
                         best = (score, X, vX, Y, vY, Z, vZ)
                 if best:

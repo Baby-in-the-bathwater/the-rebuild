@@ -112,7 +112,11 @@ def main(argv=None):
     log(f"ledger: sell {len(assets['sell'])}, hold {len(assets['hold'])}, keep {len(assets['keep'])}")
     ds = deals(g, league, assets, g["mode"])
     log(f"deals: {len(ds)} across {len({d['counterparty'] for d in ds})} counterparties")
-    multi = three_team_deals(g, league, assets, g["mode"])
+    try:
+        multi = three_team_deals(g, league, assets, g["mode"])
+    except Exception as e:  # an optional section: a failure here should not cost the brief and the board
+        log(f"three-team deals skipped: {e}")
+        multi = []
     if multi:
         log(f"three-team deals: {len(multi)}")
     lineage = report.lineage_table(own_bundles, chain, league.pdb, rid, league) if not a.no_history else []
