@@ -1,4 +1,4 @@
-// Pricing and lineup logic for the board's custom league weights. Run with: node --test tests/
+// Pricing and lineup logic for the board's custom league weights. Run with: node --test tests/board_weights.test.js
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {WEIGHT_DEFAULTS, normalizeWeights, curveValue, bestLineup, lineupChange, teamReturn} = require("../rebuild/templates/board_weights.js");
