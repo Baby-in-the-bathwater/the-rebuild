@@ -83,6 +83,18 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .num.pv.up{color:var(--recv)}.num.pv.down{color:var(--te)}.num.pv.tagged{font-weight:700}.tag.st{background:var(--line);color:var(--fg)}.tag.tx{background:var(--def);color:#fff}
 .num{color:var(--muted);font-size:12px;text-align:right}
 .num.val{font-family:var(--mono);color:var(--fg);font-size:12px}
+.num.val small,.chip .v small{display:block;font-size:10px;font-family:var(--body);color:var(--muted);line-height:1.1}
+/* custom league weights: one row above the board */
+.wstrip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;margin:0 0 12px;font-size:13px}
+.wstrip.on{border-color:var(--accent)}
+.wstrip label.tog{display:inline-flex;align-items:center;gap:7px;font-weight:600;cursor:pointer;white-space:nowrap}
+.wstrip input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
+.wctl{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.wctl input[type=range]{width:120px;accent-color:var(--accent)}
+.wctl b{font-family:var(--mono);font-size:12px;min-width:44px}
+.wstrip .dp{color:var(--muted);font-size:12px}
+.wstrip .reset{appearance:none;border:1px solid var(--line);background:none;color:var(--muted);border-radius:6px;padding:3px 9px;font:600 12px var(--body);cursor:pointer}
+.wstrip .reset:hover{color:var(--fg)}
 .num.ppg.good{color:var(--recv);font-weight:600}
 .cols{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 40px 56px;gap:0 8px;padding:8px 14px 0;font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .cols span:nth-child(n+3){text-align:right}
@@ -245,6 +257,7 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 <section id="compare" aria-label="All proposed deals" hidden></section>
 <section id="history" aria-label="League trade history" hidden></section>
 <div class="tabs" id="tabs" role="tablist" aria-label="Counterparty"></div>
+<div class="wstrip" id="weights" aria-label="Custom league weights"></div>
 <div id="board">
   <section class="dealbar" id="rail" aria-label="Deals and the current trade"></section>
   <div class="rosters" id="rosters" aria-label="Team rosters"></div>
@@ -276,6 +289,12 @@ const others = [...withDeals, ...DATA.teams.map(t => t.rid).filter(r => r !== ME
 let sel = {team: others[0], deal: 0, v: null};
 try { const s = JSON.parse(localStorage.getItem("rebuild-board-" + DATA.league_id) || "null"); if (s && T[s.team] && s.team !== ME) sel = s; } catch (e) {}
 if (sel.custom && !Array.isArray(sel.custom.moves)) sel.custom = null;   // saved by an older board (send/recv lists)
+// Custom league weights (off by default): sel.weights holds the toggle, the steepness, the lineup rates and team type
+// overrides. px() is the only way a DP value reaches the screen: unchanged when off, re-priced on the chosen curve when on.
+sel.weights = normalizeWeights(sel.weights);
+const W = () => sel.weights || (sel.weights = normalizeWeights(null));
+const px = v => (W().on ? curveValue(v || 0, W().steepness) : (v || 0));
+const was = v => (W().on ? `<small>was ${fmt(v)}</small>` : "");
 const save = () => { try { localStorage.setItem("rebuild-board-" + DATA.league_id, JSON.stringify(sel)); } catch (e) {} };
 
 // Custom trades: sel.custom is null (show the drafted deal) or {moves: [{key, from, to}], base} built by clicking rows and pick chips.
@@ -290,31 +309,32 @@ function assetOf(team, key) {
   const id = key.slice(2);
   if (key.startsWith("p:")) {
     const p = team.players.find(p => String(p.id) === id);
-    return p && {kind: "player", id: p.id, label: `${p.name} (${p.pos}, ${p.age ?? "?"})`, value: p.value || 0};
+    return p && {kind: "player", id: p.id, label: `${p.name} (${p.pos}, ${p.age ?? "?"})`, value: px(p.value)};
   }
   const pk = team.picks.find(p => p.key === id);
-  return pk && {kind: "pick", key: pk.key, label: pickLabel(pk), value: pk.value || 0};
+  return pk && {kind: "pick", key: pk.key, label: pickLabel(pk), value: px(pk.value)};
 }
 let refocus = null;
 
 // All-deals view: every drafted deal as a card, variants side by side, in the brief's ranked order by default.
 const PL = Object.fromEntries(DATA.teams.flatMap(t => t.players.map(p => [String(p.id), p])));
-const sum = items => items.reduce((a, b) => a + b.value, 0);
+const sum = items => items.reduce((a, b) => a + px(b.value), 0);   // items carry DP values
 const dealAsset = d => d.fixed.map(x => x.label.replace(/ \(.*\)$/, "")).join(" + ");
 const dealPct = (d, vname) => {      // value you receive over value you send, for either deal direction
-  const f = sum(d.fixed), v = d.vars[vname].value;
+  const f = sum(d.fixed), v = sum(d.vars[vname].items);
   const [out, inn] = d.fixed_side === "sends" ? [f, v] : [v, f];
   return out ? Math.round(inn / out * 100) : null;
 };
+const dpNote = () => (W().on ? " (at DP values)" : "");
 const pctClass = p => (p === null ? "" : p >= 100 ? "good" : p < 85 ? "bad" : "");
 const tgtName = d => (d.vars.Target ? "Target" : Object.keys(d.vars)[0]);
 function itemHtml(it) {
   if (it.kind === "player") {
     const p = PL[String(it.id)], pos = p ? p.pos : "";
-    return `<li><span class="badge" style="background:${PC[pos] || "var(--k)"}">${pos}</span><span class="lb" title="${it.label}">${it.label}</span><span class="vv">${fmt(it.value)}</span></li>`;
+    return `<li><span class="badge" style="background:${PC[pos] || "var(--k)"}">${pos}</span><span class="lb" title="${it.label}">${it.label}</span><span class="vv">${fmt(px(it.value))}</span></li>`;
   }
   const r = (it.label.match(/ R(\d)/) || [])[1] || "";
-  return `<li><span class="badge" style="background:${r === "1" ? "var(--accent)" : "var(--pick)"}">R${r}</span><span class="lb" title="${it.label}">${it.label}</span><span class="vv">${fmt(it.value)}</span></li>`;
+  return `<li><span class="badge" style="background:${r === "1" ? "var(--accent)" : "var(--pick)"}">R${r}</span><span class="lb" title="${it.label}">${it.label}</span><span class="vv">${fmt(px(it.value))}</span></li>`;
 }
 function renderCompare() {
   const cmp = sel.cmp || (sel.cmp = {sort: "rank", asset: "all"});
@@ -325,7 +345,7 @@ function renderCompare() {
   if (cmp.asset !== "all") rows = rows.filter(r => dealAsset(r.d) === cmp.asset);
   if (cmp.sort === "return") rows.sort((a, b) => (dealPct(b.d, tgtName(b.d)) ?? -1) - (dealPct(a.d, tgtName(a.d)) ?? -1) || a.i - b.i);
   else if (cmp.sort === "team") rows.sort((a, b) => a.d.counterparty.localeCompare(b.d.counterparty) || a.i - b.i);
-  else if (cmp.sort === "value") rows.sort((a, b) => b.d.vars[tgtName(b.d)].value - a.d.vars[tgtName(a.d)].value || a.i - b.i);
+  else if (cmp.sort === "value") rows.sort((a, b) => sum(b.d.vars[tgtName(b.d)].items) - sum(a.d.vars[tgtName(a.d)].items) || a.i - b.i);
 
   const el = document.getElementById("compare");
   const opt = (v, label, cur) => `<option value="${v}"${v === cur ? " selected" : ""}>${label}</option>`;
@@ -346,9 +366,9 @@ function renderCompare() {
       const same = prev && prev.items.map(keyOf).join() === v.items.map(keyOf).join();
       h.push(`<div class="vcol${n === tn ? " tgt" : ""}"><div class="vh"><span>${n}</span><span class="p ${pctClass(p)}">${p === null ? "–" : p + "%"}</span></div>
         ${same ? `<div class="same">Same package as ${vnames[k - 1]}</div>` : `<ul>${v.items.map(itemHtml).join("")}</ul>`}
-        <div class="vt"><span>${sells ? "you receive" : "you send"}</span><b>${fmt(v.value)}</b></div></div>`);
+        <div class="vt"><span>${sells ? "you receive" : "you send"}</span><b>${fmt(sum(v.items))}</b></div></div>`);
     });
-    h.push(`</div><footer><b>Walk away if</b> ${d.walk}.</footer></article>`);
+    h.push(`</div><footer><b>Walk away if</b> ${d.walk}${dpNote()}.</footer></article>`);
   }
   h.push(`</div>`);
   const ms = MULTI.map((m, i) => ({m, i})).filter(x => cmp.asset === "all" || x.m.asset === cmp.asset);
@@ -375,21 +395,22 @@ function renderCompare() {
   el.querySelector("#cmp-asset").onchange = e => { cmp.asset = e.target.value; save(); render(); };
   el.querySelectorAll(".open[data-m]").forEach(b => b.onclick = () => {
     const m = MULTI[+b.dataset.m];
-    sel = {team: m.teams[1], deal: 0, v: null, custom: {moves: movesOfDeal(m), base: "m" + b.dataset.m}, view: "board", cmp, hist: sel.hist};
+    sel = {team: m.teams[1], deal: 0, v: null, custom: {moves: movesOfDeal(m), base: "m" + b.dataset.m}, view: "board", cmp, hist: sel.hist, weights: sel.weights};
     save(); render();
     document.getElementById("board").scrollIntoView({behavior: "smooth", block: "start"});
   });
   el.querySelectorAll(".open[data-i]").forEach(b => b.onclick = () => {
     const d = DATA.deals[+b.dataset.i];
-    sel = {team: d.cp_rid, deal: dealsFor(d.cp_rid).indexOf(d), v: null, custom: null, view: "board", cmp, hist: sel.hist};
+    sel = {team: d.cp_rid, deal: dealsFor(d.cp_rid).indexOf(d), v: null, custom: null, view: "board", cmp, hist: sel.hist, weights: sel.weights};
     save(); render();
     document.getElementById("board").scrollIntoView({behavior: "smooth", block: "start"});
   });
 }
 
+const pickTotal = team => (W().on ? team.picks.reduce((a, p) => a + px(p.value), 0) : team.pick_value);
 function panel(team, hl, isMe, opts = {}) {
   const h = [];
-  h.push(`<div class="phead">${opts.removable ? `<button class="unpin" type="button" data-rid="${team.rid}" aria-label="Hide ${team.name}" title="Hide this roster">×</button>` : ""}<h2>${team.name}${who(team)}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}${opts.focus ? '<span class="focus">selected</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span>${SEASONS.length ? `<span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span>` : ""}<span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(team.player_value)}</b></span><span>picks <b>${fmt(team.pick_value)}</b></span></div></div>`);
+  h.push(`<div class="phead">${opts.removable ? `<button class="unpin" type="button" data-rid="${team.rid}" aria-label="Hide ${team.name}" title="Hide this roster">×</button>` : ""}<h2>${team.name}${who(team)}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}${opts.focus ? '<span class="focus">selected</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span>${SEASONS.length ? `<span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span>` : ""}<span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(W().on ? team.players.reduce((a, p) => a + px(p.value), 0) : team.player_value)}</b></span><span>picks <b>${fmt(pickTotal(team))}</b></span></div></div>`);
   h.push(`<div class="cols"><span>Pos</span><span>Player</span><span>Team</span><span>Age</span><span>PPG</span><span title="Production vs price: rank at the position by PPG against rank by value. + produces better than priced.">P/V</span><span>Value</span></div>`);
   for (const pos of POS) {
     const ps = team.players.filter(p => p.pos === pos);
@@ -398,19 +419,19 @@ function panel(team, hl, isMe, opts = {}) {
     for (const p of ps) {
       const m = hl.players[p.id];
       const cls = isMe && DATA.ledger[p.id] ? " " + DATA.ledger[p.id] : "";
-      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${p.id}" data-key="p:${p.id}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${p.name}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${p.inj}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}${p.sig && p.sig.tag === "buy" ? '<span class="tag bl">BUY LOW</span>' : ""}${p.sig && p.sig.tag === "sell" ? '<span class="tag sh">SELL HIGH</span>' : ""}</span><span class="num">${p.team}</span><span class="num">${p.age ?? ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}</span>${pvCell(p)}<span class="num val">${p.value ? fmt(p.value) : "–"}</span></div>`);
+      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${p.id}" data-key="p:${p.id}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${p.name}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${p.inj}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}${p.sig && p.sig.tag === "buy" ? '<span class="tag bl">BUY LOW</span>' : ""}${p.sig && p.sig.tag === "sell" ? '<span class="tag sh">SELL HIGH</span>' : ""}</span><span class="num">${p.team}</span><span class="num">${p.age ?? ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}</span>${pvCell(p)}<span class="num val">${p.value ? fmt(px(p.value)) + was(p.value) : "–"}</span></div>`);
     }
     h.push(`</div>`);
   }
   if (SEASONS.length) {
-  h.push(`<div class="picks"><div class="gh">Draft picks<span class="bar" style="background:var(--pick)"></span><span>${fmt(team.pick_value)}</span></div>`);
+  h.push(`<div class="picks"><div class="gh">Draft picks<span class="bar" style="background:var(--pick)"></span><span>${fmt(pickTotal(team))}</span></div>`);
   for (const yr of SEASONS) {
     const ps = team.picks.filter(p => p.season === yr);
     h.push(`<div class="season"><div class="yr">${yr}</div><div class="chips">`);
     if (!ps.length) h.push(`<span class="none">none</span>`);
     for (const p of ps) {
       const m = hl.picks[p.key];
-      h.push(`<span class="chip${m ? " hl " + m : ""}" data-key="k:${p.key}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="r r${p.round}">R${p.round}</span>${p.own ? "own" : "via " + p.orig}${p.proj_slot && p.round === 1 ? `<small>${pad(p.proj_slot)}</small>` : ""}<span class="v">${fmt(p.value)}</span></span>`);
+      h.push(`<span class="chip${m ? " hl " + m : ""}" data-key="k:${p.key}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="r r${p.round}">R${p.round}</span>${p.own ? "own" : "via " + p.orig}${p.proj_slot && p.round === 1 ? `<small>${pad(p.proj_slot)}</small>` : ""}<span class="v">${fmt(px(p.value))}${was(p.value)}</span></span>`);
     }
     h.push(`</div></div>`);
   }
@@ -523,7 +544,7 @@ function render() {
     + (nHist ? `<button class="view" role="tab" aria-selected="${view === "history"}" data-view="history">League trades (${nHist})</button>` : "");
   views.querySelectorAll(".view").forEach(b => b.onclick = () => { sel.view = b.dataset.view; save(); render(); });
   const tabs = document.getElementById("tabs");
-  tabs.hidden = document.getElementById("board").hidden = view !== "board";
+  tabs.hidden = document.getElementById("board").hidden = document.getElementById("weights").hidden = view !== "board";
   document.getElementById("compare").hidden = view !== "compare";
   document.getElementById("history").hidden = view !== "history";
   if (view === "compare") {
@@ -576,8 +597,9 @@ function render() {
     if (x.a.kind === "player") hl.players[x.a.id] = cls; else hl.picks[x.a.key] = cls;
   }
   document.getElementById("board").classList.toggle("duo", shown.length <= 2);
-  const ros = document.getElementById("rosters");
+  const ros = document.getElementById("rosters"), scrollX = ros.scrollLeft;
   ros.innerHTML = shown.map(rid => `<section class="panel" data-rid="${rid}" aria-label="${T[rid].name} roster">${panel(T[rid], hl, rid === ME, {focus: rid === other.rid, removable: pins.includes(rid) && !inTrade.includes(rid) && rid !== other.rid})}</section>`).join("");
+  ros.scrollLeft = scrollX;
   ros.querySelectorAll(".unpin").forEach(b => b.onclick = () => togglePin(+b.dataset.rid));
 
   // Clicking an asset forks the shown proposal into a custom trade (or edits the one in progress). From your roster it goes
@@ -637,7 +659,7 @@ function render() {
     const myP = pctOf(ME);
     const foot = custom
       ? `<p class="hint">Click rows on any roster to add or remove pieces. Drag a piece onto another team, here or on its roster, to send it there. ${multi ? "Clear brings the deal list back." : (deal ? "Ask, Target or Floor go back to the drafted deal." : "")}</p>`
-      : `<div class="walk"><b>Walk away if</b> ${deal.walk}.</div>`;
+      : `<div class="walk"><b>Walk away if</b> ${deal.walk}${dpNote()}.</div>`;
     right = `<div class="panel"><div class="custom-head" style="margin-top:0"><span>${title}</span>${custom ? `<button class="clear" type="button">Clear</button>` : ""}</div>
       <div class="mgrid">${blocks}</div>
       <div class="tfoot"><span>Your return on what you send</span><span class="big ${pcls(myP)}">${myP === null ? "–" : myP + "%"}</span></div>
@@ -680,6 +702,26 @@ function render() {
   if (clear) clear.onclick = () => { sel.custom = {moves: [], base: null}; save(); render(); };
   sel.v = v;
 }
+// The weights strip is built once and never re-rendered: rebuilding it would drop a slider out from under the pointer.
+function buildWeights() {
+  const el = document.getElementById("weights"), w = W();
+  el.innerHTML = `<label class="tog"><input type="checkbox" id="w-on"${w.on ? " checked" : ""}>Custom league weights</label>
+    <span class="wctl wset"><label for="w-steep">Steepness</label><input type="range" id="w-steep" min="0.005" max="0.035" step="0.0005" value="${w.steepness}"><b id="w-steep-v"></b><span class="dp">DP 0.0235</span></span>
+    <button type="button" class="reset wset" id="w-reset">Reset</button>`;
+  const sync = () => {
+    const w = W();
+    el.classList.toggle("on", w.on);
+    el.querySelectorAll(".wset").forEach(n => n.hidden = !w.on);
+    document.getElementById("w-steep").value = w.steepness;
+    document.getElementById("w-steep-v").textContent = w.steepness.toFixed(4);
+  };
+  const apply = () => { sync(); save(); render(); };
+  document.getElementById("w-on").onchange = e => { W().on = e.target.checked; apply(); };
+  document.getElementById("w-steep").oninput = e => { W().steepness = +e.target.value; apply(); };
+  document.getElementById("w-reset").onclick = () => { W().steepness = WEIGHT_DEFAULTS.steepness; apply(); };
+  sync();
+}
+buildWeights();
 render();
 </script>
 </body>
