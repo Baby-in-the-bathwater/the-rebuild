@@ -112,8 +112,9 @@ def main(argv=None):
     log(f"ledger: sell {len(assets['sell'])}, hold {len(assets['hold'])}, keep {len(assets['keep'])}")
     ds = deals(g, league, assets, g["mode"])
     log(f"deals: {len(ds)} across {len({d['counterparty'] for d in ds})} counterparties")
+    types = team_types(league, values, bm, own_bundle)  # every team's call: limits what a third team takes, and the board shows it
     try:
-        multi = three_team_deals(g, league, assets, g["mode"])
+        multi = three_team_deals(g, league, assets, g["mode"], types=types)
     except Exception as e:  # an optional section: a failure here should not cost the brief and the board
         log(f"three-team deals skipped: {e}")
         multi = []
@@ -130,7 +131,6 @@ def main(argv=None):
         except Exception as e:  # network or GitHub rate limit: the rest of the run does not depend on it
             log(f"trade history skipped: {e}")
     ct = report.call_text(g, league, bm, assets)
-    types = team_types(league, values, bm, own_bundle)
     data = board.board_data(league, values, g, assets, ds, ct, trade_history=th, multi=multi, team_types=types)
     html = board.render(data, os.path.join(out, "trade-board.html"))
     md = report.write(os.path.join(out, "brief.md"), league, values, g, assets, ds, bm, lineage, shipped_note, multi=multi)

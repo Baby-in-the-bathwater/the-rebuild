@@ -13,6 +13,20 @@ MIN_SELL_VALUE = 900       # below this nobody pays in picks; it is depth, not a
 MIN_PACKAGE_PIECE = 150    # smallest piece worth listing in a package
 
 
+def ledger_sells(pos, age, value, startable, mode):
+    """Whether a team graded `mode` puts this player on its sell list. Rebuild sells at the position's turn (a year
+    early for RBs), and one tier younger once he is producing, since a contender pays now; retool sells a year past
+    the turn. The same rule decides what a third team in a three-team deal will take."""
+    if value < MIN_SELL_VALUE:
+        return False
+    turn = SELL_AGE[pos]
+    if mode == "rebuild":
+        return age >= turn - (1 if pos == "RB" else 0) or (age >= turn - 2 and startable)
+    if mode == "retool":
+        return age >= turn + 1
+    return False
+
+
 def classify_assets(team, mode, league):
     sell, hold, keep, filler = [], [], [], []
     for p in team["players"]:
@@ -23,10 +37,8 @@ def classify_assets(team, mode, league):
         age = p["age"] or 0
         sell_age = SELL_AGE[pos]
         if mode == "rebuild":
-            if p["value"] >= MIN_SELL_VALUE and age >= sell_age - (1 if pos == "RB" else 0):
+            if ledger_sells(pos, age, p["value"], p["startable"], mode):
                 sell.append(p)
-            elif p["value"] >= MIN_SELL_VALUE and age >= sell_age - 2 and p["startable"]:
-                sell.append(p)          # one tier younger but already producing: a contender pays now
             elif age < sell_age - 1 and p["value"] >= 600:
                 hold.append(p)
             elif age <= 24 or (p["years_exp"] or 9) <= 1:
@@ -41,7 +53,7 @@ def classify_assets(team, mode, league):
             else:
                 filler.append(p)
         else:  # retool
-            if p["value"] >= MIN_SELL_VALUE and age >= sell_age + 1:
+            if ledger_sells(pos, age, p["value"], p["startable"], mode):
                 sell.append(p)
             elif p["value"] >= 600:
                 hold.append(p)
@@ -205,6 +217,14 @@ def buy_positions(g, me, league):
     return below or ranked[:1] or ["RB"]
 
 
+def retool_spendable(team, items, league):
+    """What a retooling team will pay with: everything but its own first in the next draft and its eight most
+    valuable players (its core). Used for your retool buys and for a retooling third team in a three-team deal."""
+    own_next_first = {pk["key"] for pk in team["picks"] if pk["round"] == 1 and pk["own"] and pk["season"] == league.pick_seasons[0]}
+    core = {p["id"] for p in sorted((p for p in team["players"] if p["pos"] in TH), key=lambda p: -p["value"])[:8]}
+    return [i for i in items if not (i["kind"] == "pick" and i["key"] in own_next_first) and not (i["kind"] == "player" and i["id"] in core)]
+
+
 def buy_deals(g, league, me, mode, max_counterparties=6):
     """Buy a starter at the two weakest positions. Contend buys older production with picks and youth;
     retool buys a young starter (one who is still there when the window opens) with surplus picks and
@@ -220,9 +240,7 @@ def buy_deals(g, league, me, mode, max_counterparties=6):
                     for p in me["players"] if p["pos"] in TH and p["value"] >= MIN_PACKAGE_PIECE
                     and (not p["startable"] or have.get(p["pos"], 0) - need_n.get(p["pos"], 9) >= 2)]
     if mode == "retool":
-        own_next_first = {pk["key"] for pk in me["picks"] if pk["round"] == 1 and pk["own"] and pk["season"] == league.pick_seasons[0]}
-        core = {p["id"] for p in sorted((p for p in me["players"] if p["pos"] in TH), key=lambda p: -p["value"])[:8]}
-        my_items = [i for i in my_items if not (i["kind"] == "pick" and i["key"] in own_next_first) and not (i["kind"] == "player" and i["id"] in core)]
+        my_items = retool_spendable(me, my_items, league)
     budget = sum(i["value"] for i in my_items)
     for pos in want:
         for t, _ in buy_counterparties(g, league, pos, mode)[:(max_counterparties if mode == "contend" else None)]:
@@ -316,11 +334,24 @@ def _bridge_items(team, mode, league, wanted_keys):
     return out
 
 
-def three_team_deals(g, league, assets, mode, per_asset=2, max_total=8, max_buyers=6):
+def bridge_fits(item, b_type, b_needs):
+    """Whether third team B, graded `b_type`, would take this player from A: never one its own sell list would hold
+    (ledger_sells, graded the same way), and never one past the position's turn unless B is retooling and he fills
+    one of its two weakest spots. A contender, or an ungraded team, takes anyone. Unknown age counts as old."""
+    if b_type not in ("rebuild", "retool"):
+        return True
+    age = item.get("age") or 99
+    if ledger_sells(item["pos"], age, item["value"], item.get("startable"), b_type):
+        return False
+    return age < SELL_AGE[item["pos"]] or (b_type == "retool" and item["pos"] in b_needs[:2])
+
+
+def three_team_deals(g, league, assets, mode, per_asset=2, max_total=8, max_buyers=6, types=None):
     """Sell deals routed through a third team. You send a sell asset to buyer A; A pays part of it in what you want
     (near-term firsts, young players) and sends players you do not want to team B; B, which wants them, pays you
     the rest in picks or youth. Kept only when every other team comes out near fair at market value and your
-    return is better than the best two-team package A alone could send."""
+    return is better than the best two-team package A alone could send. `types` (rid -> contend/retool/rebuild,
+    from grade.team_types) limits what B takes to players that suit it; without it B is judged by standings alone."""
     if mode not in ("rebuild", "retool"):
         return []
     me = g["team"]
@@ -347,13 +378,19 @@ def three_team_deals(g, league, assets, mode, per_asset=2, max_total=8, max_buye
                 if B["rid"] in (me["rid"], A["rid"]):
                     continue
                 b_needs = positional_need(g["rows"], B["rid"])
-                contending = B["rank"] <= n // 2 + 1
+                b_type = (types or {}).get(B["rid"])
+                contending = b_type == "contend" if b_type else B["rank"] <= n // 2 + 1
                 b_want = tradeable(B, mode, league)
+                if b_type == "retool":
+                    b_want = retool_spendable(B, b_want, league)   # a team trying to win next year keeps its own next first and its core
                 if not b_want:
                     continue
-                # what B takes from A: scored by B's weakest spots, a contender's taste for producers, and A's redundancy at the sell position
+                # what B takes from A: only players that suit B's grade, scored by B's weakest spots, a contender's
+                # taste for producers, and A's redundancy at the sell position
                 bridge = [dict(i, pref=1.0 + (1.0 if i["pos"] in b_needs[:2] else 0.0) + (0.4 if contending and i["startable"] else 0.0)
-                               + (0.5 if i["pos"] == sell["pos"] else 0.0)) for i in bridge_base]
+                               + (0.5 if i["pos"] == sell["pos"] else 0.0)) for i in bridge_base if bridge_fits(i, b_type, b_needs)]
+                if not bridge:
+                    continue
                 best = None
                 for X in xs:
                     vX = sum(i["value"] for i in X)
