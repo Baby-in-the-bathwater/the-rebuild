@@ -110,9 +110,9 @@ def main(argv=None):
     log(f"call: {g['mode']} (window {g['window']}); " + "; ".join(g["reasons"]))
     assets = classify_assets(g["team"], g["mode"], league)
     log(f"ledger: sell {len(assets['sell'])}, hold {len(assets['hold'])}, keep {len(assets['keep'])}")
-    ds = deals(g, league, assets, g["mode"])
+    types = team_types(league, values, bm, own_bundle)  # every team's call: buyers for an injured sell, what a third team takes, the board
+    ds = deals(g, league, assets, g["mode"], types=types)
     log(f"deals: {len(ds)} across {len({d['counterparty'] for d in ds})} counterparties")
-    types = team_types(league, values, bm, own_bundle)  # every team's call: limits what a third team takes, and the board shows it
     try:
         multi = three_team_deals(g, league, assets, g["mode"], types=types)
     except Exception as e:  # an optional section: a failure here should not cost the brief and the board

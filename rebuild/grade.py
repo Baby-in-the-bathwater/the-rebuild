@@ -7,6 +7,9 @@ from .metrics import TH, percentile, team_rows, zwithin
 POS_ORDER = {"QB": 0, "RB": 1, "WR": 2, "TE": 3, "K": 4, "DEF": 5}
 # age at which a position's dynasty value starts falling fast; the sell list keys off this
 SELL_AGE = {"QB": 30, "RB": 25, "WR": 27, "TE": 28}
+# Sleeper injury statuses that mean "not playing for weeks": injured reserve, PUP, suspended, did not report.
+# Out, Doubtful and Questionable are week to week and do not count. Sleeper gives no return date.
+OUT_STATUSES = {"IR", "PUP", "Sus", "DNR"}
 
 
 def team_assets(league, values, rid):
@@ -23,6 +26,8 @@ def team_assets(league, values, rid):
         players.append({"id": pid, "name": p.get("full_name") or pid, "pos": pos, "team": p.get("team") or "FA", "age": p.get("age"),
                         "years_exp": p.get("years_exp"), "ppg": ppg, "gp": g, "value": values.player(p), "ir": pid in reserve, "taxi": pid in taxi,
                         "inj": p.get("injury_status") or "", "starter": pid in starters,
+                        "out": (p.get("injury_status") or "") in OUT_STATUSES,
+                        "inj_note": ", ".join(x for x in (p.get("injury_body_part"), p.get("injury_notes")) if x),
                         "startable": bool(pos in TH and g >= 3 and ppg >= TH[pos])})
     players.sort(key=lambda x: (POS_ORDER.get(x["pos"], 9), -x["value"]))
     picks = []

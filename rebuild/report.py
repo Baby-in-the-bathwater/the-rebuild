@@ -1,7 +1,7 @@
 """The written brief (Markdown): the call, where the team stands, what wins the format, league history, the ledger, deals, what to expect."""
 import statistics as st
 
-from .trades import buy_positions
+from .trades import buy_positions, out_now
 from .metrics import TH, team_rows, zwithin
 
 
@@ -184,6 +184,18 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note, mul
         for p in assets["sell"]:
             A(f"| {p['name']} | {p['pos']} | {p['age']} | {p['ppg']} | {p['value']:,} | {assets['reason'].get(p['id'], '')} |")
         A("")
+        for p in assets["sell"]:
+            if out_now(p, league):
+                n_deals = sum(1 for d in deals if d.get("asset") == p["name"])
+                n_multi = sum(1 for d in (multi or []) if d.get("asset") == p["name"])
+                A(f"**{p['name']} is out now** ({p['inj']}" + (f": {p['inj_note'].lower()}" if p.get("inj_note") else "") + "). "
+                  "Contenders need points before the playoffs and Sleeper gives no return date, so his deals go to retooling teams, "
+                  "which are building for next season and can wait on him; expect them to pay less than a healthy price. "
+                  + (f"{n_deals} two-team deal{'s' if n_deals != 1 else ''} below" if n_deals else "No retooling team can pay his floor on its own right now")
+                  + (f"; {n_multi} three-team deal{'s' if n_multi != 1 else ''} route{'s' if n_multi == 1 else ''} him to one with a third team's help. " if n_multi else ". ")
+                  + f"The other path: hold him{f' past the week {league.trade_deadline} deadline' if league.trade_deadline else ''} "
+                  "and sell after the season to next year's contenders, once he is healthy.")
+                A("")
     else:
         A("Nothing on the roster clears the sell bar (value 900+ at an age a contender still pays for).")
         A("")

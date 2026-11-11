@@ -13,6 +13,31 @@ MIN_SELL_VALUE = 900       # below this nobody pays in picks; it is depth, not a
 MIN_PACKAGE_PIECE = 150    # smallest piece worth listing in a package
 
 
+def out_now(p, league):
+    """A sell asset that is out for weeks (IR, PUP, suspended, did not report) while in-season trades are still open.
+    Contenders need points before the playoffs and Sleeper gives no return date, so his deals go to retooling teams,
+    which build for next season and can wait on him; holding him to sell after the season is the other path."""
+    if not p.get("out") or getattr(league, "status", None) != "in_season":
+        return False
+    deadline = getattr(league, "trade_deadline", None)
+    return not deadline or (getattr(league, "week", 0) or 0) <= int(deadline)
+
+
+def retool_buyers(g, types):
+    """Teams graded retool, ordered the way counterparties orders contenders (record, firsts, youth) but at any rank:
+    the buyers for a player who is out now."""
+    n = g["n"]
+    out = []
+    for rid, t in g["teams"].items():
+        if rid == g["team"]["rid"] or (types or {}).get(rid) != "retool":
+            continue
+        firsts = sum(t["firsts"].values())
+        young = sum(p["value"] for p in t["players"] if (p["age"] or 99) <= 25 and p["pos"] in TH)
+        out.append(((n - t["rank"]) * 400 + firsts * 600 + young / 10, t, positional_need(g["rows"], rid)))
+    out.sort(key=lambda x: -x[0])
+    return [(t, needs) for _, t, needs in out]
+
+
 def ledger_sells(pos, age, value, startable, mode):
     """Whether a team graded `mode` puts this player on its sell list. Rebuild sells at the position's turn (a year
     early for RBs), and one tier younger once he is producing, since a contender pays now; retool sells a year past
@@ -70,6 +95,9 @@ def classify_assets(team, mode, league):
                            else f"{p['pos']} age {p['age']}, producing {p['ppg']} ppg: peak sale window, a contender pays now")
         if mode == "contend":
             reason[p["id"]] = f"{p['pos']} age {p['age']}, {p['ppg']} ppg: upside a rebuilder values more than a contender does"
+        if out_now(p, league):
+            reason[p["id"]] = (reason[p["id"]].replace(": peak sale window, a contender pays now", ": peak sale window once he is healthy")
+                               + f"; {p['inj']}" + (f" ({p['inj_note'].lower()})" if p.get("inj_note") else "") + " now, so selling before the deadline is selling low")
     return {"sell": sell, "hold": hold, "keep": keep, "filler": filler, "reason": reason}
 
 
@@ -141,6 +169,8 @@ def tradeable(team, mode, league, want_pos=None):
             pref += min(p["ppg"], 25) / 25
             if age >= SELL_AGE[p["pos"]] + 3:
                 pref -= 0.6
+            if p.get("out"):
+                pref -= 1.0   # a contender needs points now; a player out for weeks is not one
         items.append({"kind": "player", "id": p["id"], "value": p["value"], "pref": pref, "pos": p["pos"], "age": p["age"],
                       "label": f"{p['name']} ({p['pos']}, {p['age'] or '?'})"})
     return items
@@ -246,7 +276,7 @@ def buy_deals(g, league, me, mode, max_counterparties=6):
         for t, _ in buy_counterparties(g, league, pos, mode)[:(max_counterparties if mode == "contend" else None)]:
             if mode == "contend":
                 targets = sorted([p for p in t["players"] if p["pos"] == pos and p["startable"] and p["value"] >= MIN_SELL_VALUE
-                                  and (league.redraft or (p["age"] or 0) >= SELL_AGE[pos] - 2)], key=lambda p: -p["ppg"])[:1]
+                                  and not p.get("out") and (league.redraft or (p["age"] or 0) >= SELL_AGE[pos] - 2)], key=lambda p: -p["ppg"])[:1]
             else:
                 targets = sorted([p for p in t["players"] if p["pos"] == pos and p["startable"] and p["value"] >= 1500
                                   and (p["age"] or 99) <= SELL_AGE[pos] - 1 and p["value"] * ASK <= budget], key=lambda p: -p["value"])[:1]
@@ -276,14 +306,17 @@ def return_quality(items, sell_value, fit):
             + 0.05 * min(total / sell_value, 1.1))
 
 
-def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=None, deals_per_asset=4):
+def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=None, deals_per_asset=4, types=None):
     me = g["team"]
     out = []
     if mode in ("rebuild", "retool"):
         cps = counterparties(g, league, mode)[:max_counterparties]
         for sell in assets["sell"]:
-            for t, needs in cps:
+            injured = bool(types) and out_now(sell, league)
+            for t, needs in (retool_buyers(g, types)[:max_counterparties] if injured else cps):
                 items = tradeable(t, mode, league)
+                if injured:
+                    items = retool_spendable(t, items, league)   # a retooling buyer keeps its own next first and its core
                 if sum(i["value"] for i in items) < sell["value"] * FLOOR:
                     continue
                 vars_ = {}
@@ -296,7 +329,8 @@ def deals(g, league, assets, mode, max_counterparties=6, deals_per_cp=None, deal
                 fit = 1.0 if sell["pos"] in needs[:2] else 0.0
                 tgt = vars_["Target"]["items"]
                 score = return_quality(tgt, sell["value"], fit)
-                out.append({"counterparty": t["name"], "cp_rid": t["rid"], "title": f"{sell['name']} to {t['name']}" + (f" (needs {sell['pos']})" if fit else ""),
+                out.append({"counterparty": t["name"], "cp_rid": t["rid"], "injured": injured,
+                            "title": f"{sell['name']} to {t['name']}" + (f" (needs {sell['pos']})" if fit else "") + (" (injured: a retooling team's buy-low)" if injured else ""),
                             "sends": [{"kind": "player", "id": sell["id"], "label": f"{sell['name']} ({sell['pos']}, {sell['age']})", "value": sell["value"]}],
                             "vars": vars_, "walk": f"the {best['label']} is not in it, or the return falls under {int(sell['value'] * FLOOR):,}",
                             "need_fit": bool(fit), "score": score, "asset": sell["name"]})
@@ -330,14 +364,17 @@ def _bridge_items(team, mode, league, wanted_keys):
         if p["pos"] not in TH or p["value"] < MIN_PACKAGE_PIECE or p["id"] in wanted_keys:
             continue
         out.append({"kind": "player", "id": p["id"], "value": p["value"], "pos": p["pos"], "age": p["age"], "startable": p["startable"],
-                    "label": f"{p['name']} ({p['pos']}, {p['age'] or '?'})"})
+                    "out": p.get("out", False), "label": f"{p['name']} ({p['pos']}, {p['age'] or '?'})"})
     return out
 
 
 def bridge_fits(item, b_type, b_needs):
     """Whether third team B, graded `b_type`, would take this player from A: never one its own sell list would hold
     (ledger_sells, graded the same way), and never one past the position's turn unless B is retooling and he fills
-    one of its two weakest spots. A contender, or an ungraded team, takes anyone. Unknown age counts as old."""
+    one of its two weakest spots. A contender takes anyone who is playing (not one out for weeks: it needs points
+    now); an ungraded team takes anyone. Unknown age counts as old."""
+    if b_type == "contend":
+        return not item.get("out")
     if b_type not in ("rebuild", "retool"):
         return True
     age = item.get("age") or 99
@@ -360,8 +397,11 @@ def three_team_deals(g, league, assets, mode, per_asset=2, max_total=8, max_buye
     found = []
     for sell in assets["sell"]:
         S = sell["value"]
-        for A, a_needs in buyers:
+        injured = bool(types) and out_now(sell, league)   # out for weeks: buyer A is a retooling team, as in the two-team deals
+        for A, a_needs in (retool_buyers(g, types)[:max_buyers] if injured else buyers):
             a_want = tradeable(A, mode, league)
+            if injured:
+                a_want = retool_spendable(A, a_want, league)
             wanted = {i.get("id") for i in a_want if i["kind"] == "player"}
             bridge_base = _bridge_items(A, mode, league, wanted)
             if not bridge_base:
@@ -387,7 +427,7 @@ def three_team_deals(g, league, assets, mode, per_asset=2, max_total=8, max_buye
                     continue
                 # what B takes from A: only players that suit B's grade, scored by B's weakest spots, a contender's
                 # taste for producers, and A's redundancy at the sell position
-                bridge = [dict(i, pref=1.0 + (1.0 if i["pos"] in b_needs[:2] else 0.0) + (0.4 if contending and i["startable"] else 0.0)
+                bridge = [dict(i, pref=1.0 + (1.0 if i["pos"] in b_needs[:2] else 0.0) + (0.4 if contending and i["startable"] and not i.get("out") else 0.0)
                                + (0.5 if i["pos"] == sell["pos"] else 0.0)) for i in bridge_base if bridge_fits(i, b_type, b_needs)]
                 if not bridge:
                     continue
@@ -432,7 +472,8 @@ def three_team_deals(g, league, assets, mode, per_asset=2, max_total=8, max_buye
         why = (f"{A['name']} can cover {round(vX / S * 100)}% of {sell['name']} in what you want. "
                f"{B['name']} pays the rest for {', '.join(i['label'].split(' (')[0] for i in Z)}"
                + (f", filling its {'/'.join(holes)} hole." if holes else ", depth for a contender.")
-               + (" Beats the best two-team package from " + A["name"] + "." if bar >= 0 else f" {A['name']} cannot reach {sell['name']}'s value alone in pieces you want."))
+               + (" Beats the best two-team package from " + A["name"] + "." if bar >= 0 else f" {A['name']} cannot reach {sell['name']}'s value alone in pieces you want.")
+               + (f" {sell['name']} is out now ({sell['inj']}): {A['name']} is retooling and can wait on him." if types and out_now(sell, league) else ""))
         out.append({"multi": True, "title": f"{sell['name']} to {A['name']}, with {B['name']}", "asset": sell["name"],
                     "teams": [me["rid"], A["rid"], B["rid"]], "moves": moves, "why": why, "score": round(score, 3)})
         if len(out) >= max_total:
