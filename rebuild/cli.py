@@ -16,7 +16,7 @@ from . import pdf as pdfmod
 from . import board, report
 from . import trade_history as thmod
 from .crawl import crawl_lineages, discover_pool, load_bundles, walk_lineage
-from .grade import grade
+from .grade import grade, team_types
 from .league import League, fmt_key
 from .sleeper import Sleeper
 from .trades import classify_assets, deals, three_team_deals
@@ -126,7 +126,8 @@ def main(argv=None):
         except Exception as e:  # network or GitHub rate limit: the rest of the run does not depend on it
             log(f"trade history skipped: {e}")
     ct = report.call_text(g, league, bm, assets)
-    data = board.board_data(league, values, g, assets, ds, ct, trade_history=th, multi=multi)
+    types = team_types(league, values, bm, own_bundle)
+    data = board.board_data(league, values, g, assets, ds, ct, trade_history=th, multi=multi, team_types=types)
     html = board.render(data, os.path.join(out, "trade-board.html"))
     md = report.write(os.path.join(out, "brief.md"), league, values, g, assets, ds, bm, lineage, shipped_note, multi=multi)
     pdf_path = None
