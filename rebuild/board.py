@@ -57,7 +57,7 @@ def price_signals(teams):
     return out
 
 
-def board_data(league, values, g, assets, deals, call_text, trade_history=None):
+def board_data(league, values, g, assets, deals, call_text, trade_history=None, multi=None):
     teams = []
     for t in sorted(g["teams"].values(), key=lambda t: t["rank"]):
         teams.append({k: t[k] for k in ("rid", "name", "owner", "wins", "losses", "pf", "rank", "proj_slot", "player_value", "pick_value", "startable", "core_age")}
@@ -79,7 +79,7 @@ def board_data(league, values, g, assets, deals, call_text, trade_history=None):
             f"(QB {SELL_AGE['QB']}, RB {SELL_AGE['RB']}, WR {SELL_AGE['WR']}, TE {SELL_AGE['TE']}), startable, producing at least twice as well as priced. "
             f"SELL HIGH: at or past the sell age, priced at least twice as well as producing, worth {SIGNAL_SELL_VALUE}+, not on IR.")
     return {"league": league.lg.get("name"), "league_id": league.id, "season": league.season, "week": league.week, "asof": values.asof,
-            "me_rid": g["team"]["rid"], "me_uid": league.roster(g["team"]["rid"]).get("owner_id"), "trade_history": trade_history, "mode": g["mode"], "reasons": g["reasons"], "call_text": call_text, "pick_seasons": league.pick_seasons,
+            "me_rid": g["team"]["rid"], "me_uid": league.roster(g["team"]["rid"]).get("owner_id"), "trade_history": trade_history, "multi": multi or [], "mode": g["mode"], "reasons": g["reasons"], "call_text": call_text, "pick_seasons": league.pick_seasons,
             "teams": teams, "ledger": ledger, "deals": [deal_json(d) for d in deals], "note": note}
 
 

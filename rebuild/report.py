@@ -58,7 +58,7 @@ def lineage_table(bundles, chain, pdb, rid, league):
     return rows
 
 
-def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
+def write(path, league, values, g, assets, deals, bm, lineage, shipped_note, multi=None):
     me = g["team"]
     row = g["row"] or {}
     pct = g["pct"]
@@ -220,6 +220,26 @@ def write(path, league, values, g, assets, deals, bm, lineage, shipped_note):
     if len(deals) > BRIEF_DEALS:
         A(f"{len(deals) - BRIEF_DEALS} more deals, ranked below these, are on the trade board (All deals view).")
         A("")
+    if multi:
+        names = {t["rid"]: t["name"] for t in g["teams"].values()}
+        A("## Three-team deals")
+        A("")
+        A("When a buyer cannot pay in what you want, a third team takes the buyer's players you do not want and pays you instead. "
+          "Each is kept only if both other teams land between 87% and 115% of what they send, at market value. Open them on the trade board to adjust.")
+        A("")
+        for i, d in enumerate(multi, 1):
+            A(f"### T{i}. {d['title']}")
+            A("")
+            A(d["why"])
+            A("")
+            A("| Team | Gets | Value | Sends | Return |")
+            A("|-|-|-|-|-|")
+            for rid in d["teams"]:
+                got = [m for m in d["moves"] if m["to"] == rid]
+                gv, sv = sum(m["value"] for m in got), sum(m["value"] for m in d["moves"] if m["from"] == rid)
+                A(f"| {names.get(rid, rid)} | " + ", ".join(f"{m['label']} from {names.get(m['from'], m['from'])}" for m in got)
+                  + f" | {gv:,} | {sv:,} | {gv / sv * 100:.0f}% |")
+            A("")
     # expectations
     if bm and g["mode"] != "contend":
         tr = bm["trajectories"]
