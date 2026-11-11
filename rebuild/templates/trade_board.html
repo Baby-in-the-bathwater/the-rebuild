@@ -177,6 +177,8 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .view:focus-visible,.open:focus-visible,.ctl select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 0;color:var(--muted);font-size:12px}
 .ctl label{display:inline-flex;align-items:center;gap:6px}
+.wnote{margin:12px 0 0;padding:8px 12px;border:1px solid var(--accent);border-radius:8px;font-size:13px;color:var(--fg)}
+.wnote a{color:var(--accent);cursor:pointer;margin-left:6px}
 .ctl select{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font:500 13px var(--body)}
 .cards{display:flex;flex-direction:column;gap:12px}
 .dcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -325,7 +327,14 @@ let refocus = null;
 const PL = Object.fromEntries(DATA.teams.flatMap(t => t.players.map(p => [String(p.id), p])));
 const sum = items => items.reduce((a, b) => a + px(b.value), 0);   // items carry DP values
 const dealAsset = d => d.fixed.map(x => x.label.replace(/ \(.*\)$/, "")).join(" + ");
+// The moves of a drafted two-team deal's variant: what you send goes to the counterparty, what it sends comes to you.
+function movesOfVariant(d, vname) {
+  const varItems = d.vars[vname].items;
+  const [sendItems, recvItems] = d.fixed_side === "sends" ? [d.fixed, varItems] : [varItems, d.fixed];
+  return [...sendItems.map(i => ({key: keyOf(i), from: ME, to: d.cp_rid})), ...recvItems.map(i => ({key: keyOf(i), from: d.cp_rid, to: ME}))];
+}
 const dealPct = (d, vname) => {      // value you receive over value you send, for either deal direction
+  if (W().on) return sideOf(ME, movesOfVariant(d, vname)).pct;   // re-priced, with your lineup cost
   const f = sum(d.fixed), v = sum(d.vars[vname].items);
   const [out, inn] = d.fixed_side === "sends" ? [f, v] : [v, f];
   return out ? Math.round(inn / out * 100) : null;
@@ -341,6 +350,11 @@ function itemHtml(it) {
   const r = (it.label.match(/ R(\d)/) || [])[1] || "";
   return `<li><span class="badge" style="background:${r === "1" ? "var(--accent)" : "var(--pick)"}">R${r}</span><span class="lb" title="${it.label}">${it.label}</span><span class="vv">${fmt(px(it.value))}</span></li>`;
 }
+const weightsNote = () => {
+  if (!W().on) return "";
+  const w = W();
+  return `<p class="wnote"><b>Custom league weights on:</b> steepness ${w.steepness.toFixed(4)}, lineup rates ${w.rates.contend} / ${w.rates.retool} / ${w.rates.rebuild} per point (contend / retool / rebuild). Returns include each team's lineup cost.<a class="wlink" role="button" tabindex="0">Change on the board</a></p>`;
+};
 function renderCompare() {
   const cmp = sel.cmp || (sel.cmp = {sort: "rank", asset: "all"});
   const assets = [...new Set([...DATA.deals.map(dealAsset), ...MULTI.map(m => m.asset)])];
@@ -356,7 +370,7 @@ function renderCompare() {
   const opt = (v, label, cur) => `<option value="${v}"${v === cur ? " selected" : ""}>${label}</option>`;
   const h = [`<div class="ctl"><label>Sort ${`<select id="cmp-sort">${opt("rank", "Ranked (as in the brief)", cmp.sort)}${opt("return", "Target return, high to low", cmp.sort)}${opt("value", "Target value, high to low", cmp.sort)}${opt("team", "Team", cmp.sort)}</select>`}</label>
     <label>${DATA.deals.some(d => d.fixed_side === "sends") ? "Selling" : "Buying"} <select id="cmp-asset">${opt("all", `All (${DATA.deals.length + MULTI.length})`, cmp.asset)}${assets.map(a => opt(a, `${a} (${nFor(a)})`, cmp.asset)).join("")}</select></label>
-    <span>Return is value received over value sent. Green at 100%+, red under 85%.</span></div><div class="cards">`];
+    <span>Return is value received over value sent. Green at 100%+, red under 85%.</span></div>${weightsNote()}<div class="cards">`];
   for (const {d, i} of rows) {
     const t = T[d.cp_rid], sells = d.fixed_side === "sends";
     const vnames = Object.keys(d.vars), tn = tgtName(d);
@@ -386,7 +400,7 @@ function renderCompare() {
         <div class="dt">${m.asset}<span class="arrow">→</span>${tname(A)}${who(T[A])}<span class="arrow">+</span>${tname(B)}${who(T[B])}</div>
         <div class="dm"><span>${m.why}</span></div></div><button class="open" type="button" data-m="${i}">Open on board</button></header><div class="vgrid">`);
       for (const rid of m.teams) {
-        const g = sum(got(rid)), sv = sum(gave(rid)), p = sv ? Math.round(g / sv * 100) : null;
+        const g = sum(got(rid)), sv = sum(gave(rid)), p = W().on ? sideOf(rid, movesOfDeal(m)).pct : (sv ? Math.round(g / sv * 100) : null);
         h.push(`<div class="vcol${rid === ME ? " tgt" : ""}"><div class="vh"><span>${rid === ME ? "You get" : tname(rid) + " gets"}</span><span class="p ${pctClass(p)}">${p === null ? "–" : p + "%"}</span></div>
           <ul>${got(rid).map(x => itemHtml(x).replace("</span><span class=\"vv\">", `<small>from ${x.from === ME ? "you" : tname(x.from)}</small></span><span class="vv">`)).join("")}</ul>
           <div class="vt"><span>gets / sends</span><b>${fmt(g)} / ${fmt(sv)}</b></div></div>`);
@@ -396,6 +410,8 @@ function renderCompare() {
     h.push(`</div>`);
   }
   el.innerHTML = h.join("");
+  const wl = el.querySelector(".wlink");
+  if (wl) wl.onclick = wl.onkeydown = e => { if (e.type === "keydown" && e.key !== "Enter") return; sel.view = "board"; save(); render(); document.getElementById("weights").scrollIntoView({block: "center"}); };
   el.querySelector("#cmp-sort").onchange = e => { cmp.sort = e.target.value; save(); render(); };
   el.querySelector("#cmp-asset").onchange = e => { cmp.asset = e.target.value; save(); render(); };
   el.querySelectorAll(".open[data-m]").forEach(b => b.onclick = () => {
@@ -609,9 +625,7 @@ function render() {
   let moves = [];
   if (custom) moves = custom.moves;
   else if (deal) {
-    const varItems = deal.vars[v].items;
-    const [sendItems, recvItems] = deal.fixed_side === "sends" ? [deal.fixed, varItems] : [varItems, deal.fixed];
-    moves = [...sendItems.map(i => ({key: keyOf(i), from: ME, to: other.rid})), ...recvItems.map(i => ({key: keyOf(i), from: other.rid, to: ME}))];
+    moves = movesOfVariant(deal, v);
   }
   const R = moves.map((mv, idx) => ({...mv, idx, a: T[mv.from] && assetOf(T[mv.from], mv.key)})).filter(x => x.a);
   const hl = {players: {}, picks: {}};
