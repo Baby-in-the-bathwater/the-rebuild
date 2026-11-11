@@ -42,6 +42,15 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .tfoot .big{font:700 26px var(--display)}.tfoot .big.good{color:var(--recv)}.tfoot .big.bad{color:var(--send)}
 .rosters{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;scroll-snap-type:x proximity;align-items:start}
 .rosters > .panel{flex:0 0 min(500px,92vw);scroll-snap-align:start}
+/* two teams on screen: the old three-column board, your roster | deals and trade | theirs. A third roster reflows to the strip-above layout. */
+#board.duo{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,340px) minmax(0,1fr);gap:14px;align-items:start}
+#board.duo .rosters{display:contents}
+#board.duo .rosters > .panel:first-child{order:1}
+#board.duo .dealbar{order:2;grid-template-columns:1fr;margin-bottom:0}
+#board.duo .rosters > .panel:last-child{order:3}
+#board.duo .mgrid{flex-direction:column}
+#board.duo .mgrid .mside{flex:none}
+@media (max-width:980px){#board.duo{grid-template-columns:1fr}#board.duo .dealbar{order:0}}
 .phead{position:relative}
 .unpin{position:absolute;top:8px;right:10px;appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:6px;font:700 13px var(--body);line-height:1;padding:4px 7px;cursor:pointer}
 .unpin:hover{color:var(--send);border-color:var(--send)}.unpin:focus-visible,.pin:focus-visible{outline:2px solid var(--accent)}
@@ -105,10 +114,13 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .side li{flex-wrap:wrap;align-items:center}
 .side li .il{flex:1;min-width:0}
 .side li .il small{color:var(--muted);margin-left:4px}
-.side li .to{flex-basis:100%;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
-.dest{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:1px 4px;font:500 11px var(--body);max-width:180px}
+.side li[draggable="true"]{cursor:grab}
+.side li.dragging{opacity:.45}
+.drop-ok{outline:2px dashed color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:2px}
+.drop-over{outline:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
+.dealbar.solo{grid-template-columns:1fr}
 .rm{appearance:none;border:0;background:none;color:var(--muted);font:700 14px var(--body);line-height:1;padding:0 2px;cursor:pointer}
-.rm:hover{color:var(--send)}.rm:focus-visible,.dest:focus-visible{outline:2px solid var(--accent)}
+.rm:hover{color:var(--send)}.rm:focus-visible{outline:2px solid var(--accent)}
 .mside{margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:8px}
 .mside.me{border-color:var(--accent)}
 .mh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}
@@ -562,6 +574,7 @@ function render() {
     const cls = x.from === ME ? "send" : (x.to === ME ? "recv" : "other");
     if (x.a.kind === "player") hl.players[x.a.id] = cls; else hl.picks[x.a.key] = cls;
   }
+  document.getElementById("board").classList.toggle("duo", shown.length <= 2);
   const ros = document.getElementById("rosters");
   ros.innerHTML = shown.map(rid => `<section class="panel" data-rid="${rid}" aria-label="${T[rid].name} roster">${panel(T[rid], hl, rid === ME, {focus: rid === other.rid, removable: pins.includes(rid) && !inTrade.includes(rid) && rid !== other.rid})}</section>`).join("");
   ros.querySelectorAll(".unpin").forEach(b => b.onclick = () => togglePin(+b.dataset.rid));
@@ -593,13 +606,13 @@ function render() {
   const baseIdx = custom && custom.base ? +custom.base.slice(1) : null;
   const isBase = baseIdx !== null && MULTI[baseIdx] && sameMoves(custom.moves, movesOfDeal(MULTI[baseIdx]));
   const teamsIn = [...new Set(R.flatMap(x => [x.from, x.to]))];
-  const order = [ME, other.rid, ...teamsIn.filter(r => r !== ME && r !== other.rid)].filter((r, k, a) => a.indexOf(r) === k && (teamsIn.includes(r) || r === ME || r === other.rid));
+  const order = [ME, other.rid, ...teamsIn, ...shown].filter((r, k, a) => a.indexOf(r) === k && T[r]);
+  const multi = teamsIn.length > 2;   // three or more teams: the trade takes the strip's full width and the deal list steps aside
   const gotOf = rid => R.filter(x => x.to === rid), gaveOf = rid => R.filter(x => x.from === rid);
   const tot = xs => xs.reduce((a, x) => a + x.a.value, 0);
   const pctOf = rid => { const g = tot(gaveOf(rid)); return g ? Math.round(tot(gotOf(rid)) / g * 100) : null; };
   const pcls = p => (p === null ? "" : (p >= 100 ? "good" : (p < 85 ? "bad" : "")));
-  const destSel = x => `<span class="to">to <select class="dest" data-i="${x.idx}" aria-label="Send ${x.a.label} to">${DATA.teams.filter(t => t.rid !== x.from).map(t => `<option value="${t.rid}"${t.rid === x.to ? " selected" : ""}>${t.rid === ME ? "you" : t.name}</option>`).join("")}</select></span>`;
-  const li = x => `<li><span class="il">${x.a.label}<small>from ${x.from === ME ? "you" : tname(x.from)}</small></span><span class="iv">${fmt(x.a.value)}</span>${custom ? `<button class="rm" type="button" data-i="${x.idx}" aria-label="Remove ${x.a.label}">×</button>${destSel(x)}` : ""}</li>`;
+  const li = x => `<li draggable="true" data-i="${x.idx}" data-from="${x.from}" title="Drag onto another team to send it there"><span class="il">${x.a.label}<small>from ${x.from === ME ? "you" : tname(x.from)}</small></span><span class="iv">${fmt(x.a.value)}</span>${custom ? `<button class="rm" type="button" data-i="${x.idx}" aria-label="Remove ${x.a.label}">×</button>` : ""}</li>`;
   const empty = `<li class="empty">nothing yet</li>`;
 
   const left = `<div class="panel"><h3>Deals with ${other.name}${who(other)}</h3>
@@ -616,25 +629,52 @@ function render() {
     const title = custom ? (isBase ? "Three-team deal" : (baseIdx !== null ? "Custom trade (from a three-team deal)" : (teamsIn.length > 2 ? "Custom multi-team trade" : "Custom trade"))) : (deal ? `${deal.title} · ${v}` : "Trade");
     const blocks = order.map(rid => {
       const p = pctOf(rid), got = gotOf(rid);
-      return `<div class="mside${rid === ME ? " me" : ""}"><div class="mh"><span><b>${rid === ME ? "You" : tname(rid)}</b>${rid !== ME ? who(T[rid]) : ""} get${rid === ME ? "" : "s"}</span><span class="p ${pcls(p)}">${p === null ? "–" : p + "%"}</span></div>
+      return `<div class="mside${rid === ME ? " me" : ""}" data-drop="${rid}"><div class="mh"><span><b>${rid === ME ? "You" : tname(rid)}</b>${rid !== ME ? who(T[rid]) : ""} get${rid === ME ? "" : "s"}</span><span class="p ${pcls(p)}">${p === null ? "–" : p + "%"}</span></div>
         <ul class="side" style="list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:3px">${got.map(li).join("") || empty}</ul>
         <div class="mt">gets <b>${fmt(tot(got))}</b> for <b>${fmt(tot(gaveOf(rid)))}</b> sent</div></div>`;
     }).join("");
     const myP = pctOf(ME);
     const foot = custom
-      ? `<p class="hint">Click rows on any roster to add or remove pieces. Change a piece's <b>to</b> to route it elsewhere. ${deal ? "Ask, Target or Floor go back to the drafted deal." : ""}</p>`
+      ? `<p class="hint">Click rows on any roster to add or remove pieces. Drag a piece onto another team, here or on its roster, to send it there. ${multi ? "Clear brings the deal list back." : (deal ? "Ask, Target or Floor go back to the drafted deal." : "")}</p>`
       : `<div class="walk"><b>Walk away if</b> ${deal.walk}.</div>`;
     right = `<div class="panel"><div class="custom-head" style="margin-top:0"><span>${title}</span>${custom ? `<button class="clear" type="button">Clear</button>` : ""}</div>
       <div class="mgrid">${blocks}</div>
       <div class="tfoot"><span>Your return on what you send</span><span class="big ${pcls(myP)}">${myP === null ? "–" : myP + "%"}</span></div>
       ${isBase ? `<p class="why">${MULTI[baseIdx].why}</p>` : ""}${foot}</div>`;
   }
-  rail.innerHTML = left + right;
+  rail.innerHTML = multi ? right : left + right;
+  rail.classList.toggle("solo", multi);
   rail.querySelectorAll(".deal[data-i]").forEach(b => b.onclick = () => { sel.deal = +b.dataset.i; sel.v = null; sel.custom = null; save(); render(); });
   rail.querySelectorAll(".deal[data-m]").forEach(b => b.onclick = () => { sel.custom = {moves: movesOfDeal(MULTI[+b.dataset.m]), base: "m" + b.dataset.m}; save(); render(); });
   rail.querySelectorAll(".var").forEach(b => b.onclick = () => { sel.v = b.dataset.v; sel.custom = null; save(); render(); });
   rail.querySelectorAll(".rm").forEach(b => b.onclick = () => { sel.custom.moves.splice(+b.dataset.i, 1); save(); render(); });
-  rail.querySelectorAll(".dest").forEach(sl => sl.onchange = () => { sel.custom.moves[+sl.dataset.i].to = +sl.value; save(); render(); });
+
+  // Drag a piece in the trade onto any team's block above or its roster below to send it there instead.
+  ros.querySelectorAll("section[data-rid]").forEach(sec => sec.dataset.drop = sec.dataset.rid);
+  const targets = () => document.querySelectorAll("#board [data-drop]");
+  const sendTo = (i, rid) => {
+    if (!sel.custom) sel.custom = {moves: moves.map(m => ({key: m.key, from: m.from, to: m.to})), base: null};
+    const m = sel.custom.moves[i];
+    if (!m || rid === m.from || rid === m.to) return;
+    m.to = rid; save(); render();
+  };
+  let drag = null;
+  rail.querySelectorAll(".side li[draggable]").forEach(n => {
+    n.ondragstart = e => {
+      drag = {i: +n.dataset.i, from: +n.dataset.from};
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", n.dataset.i);
+      n.classList.add("dragging");
+      targets().forEach(t => { if (+t.dataset.drop !== drag.from) t.classList.add("drop-ok"); });
+    };
+    n.ondragend = () => { drag = null; n.classList.remove("dragging"); targets().forEach(t => t.classList.remove("drop-ok", "drop-over")); };
+  });
+  targets().forEach(t => {
+    const rid = +t.dataset.drop;
+    t.ondragover = e => { if (drag && rid !== drag.from) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; t.classList.add("drop-over"); } };
+    t.ondragleave = e => { if (!t.contains(e.relatedTarget)) t.classList.remove("drop-over"); };
+    t.ondrop = e => { if (!drag || rid === drag.from) return; e.preventDefault(); const i = drag.i; drag = null; sendTo(i, rid); };
+  });
   const clear = rail.querySelector(".clear");
   if (clear) clear.onclick = () => { sel.custom = {moves: [], base: null}; save(); render(); };
   sel.v = v;
