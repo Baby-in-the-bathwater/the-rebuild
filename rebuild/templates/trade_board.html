@@ -95,6 +95,11 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .wstrip .dp{color:var(--muted);font-size:12px}
 .wstrip .reset{appearance:none;border:1px solid var(--line);background:none;color:var(--muted);border-radius:6px;padding:3px 9px;font:600 12px var(--body);cursor:pointer}
 .wstrip .reset:hover{color:var(--fg)}
+.wctl.rate input[type=range]{width:90px}
+.mt.lu{color:var(--muted)}.mt.lu b.good{color:var(--recv)}.mt.lu b.bad{color:var(--send)}
+.tfoot .pure{font-size:12px;color:var(--muted);margin-left:auto;margin-right:10px}
+.ttype{margin-left:8px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:5px;font:600 11px var(--body);padding:2px 4px;vertical-align:4px}
+.ttype.ovr{border-color:var(--accent);color:var(--accent)}
 .num.ppg.good{color:var(--recv);font-weight:600}
 .cols{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 40px 56px;gap:0 8px;padding:8px 14px 0;font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .cols span:nth-child(n+3){text-align:right}
@@ -309,10 +314,10 @@ function assetOf(team, key) {
   const id = key.slice(2);
   if (key.startsWith("p:")) {
     const p = team.players.find(p => String(p.id) === id);
-    return p && {kind: "player", id: p.id, label: `${p.name} (${p.pos}, ${p.age ?? "?"})`, value: px(p.value)};
+    return p && {kind: "player", id: p.id, label: `${p.name} (${p.pos}, ${p.age ?? "?"})`, value: px(p.value), dp: p.value || 0};
   }
   const pk = team.picks.find(p => p.key === id);
-  return pk && {kind: "pick", key: pk.key, label: pickLabel(pk), value: px(pk.value)};
+  return pk && {kind: "pick", key: pk.key, label: pickLabel(pk), value: px(pk.value), dp: pk.value || 0};
 }
 let refocus = null;
 
@@ -407,10 +412,28 @@ function renderCompare() {
   });
 }
 
+// A team's type: the user's override if set, else the app's grade. Its lineup rate prices each weekly point a trade adds or costs.
+const typeOf = rid => W().types[rid] || (T[rid] && T[rid].type) || "retool";
+// One team's side of a trade given its moves ({key, from, to}): value in and out (priced), the change in its best lineup's
+// weekly points, that change priced at its type's rate, and its return. With weights off there is no lineup amount.
+function sideOf(rid, moves) {
+  const live = moves.map(m => ({...m, a: T[m.from] && assetOf(T[m.from], m.key)})).filter(m => m.a);
+  const got = live.filter(m => m.to === rid).reduce((t, m) => t + m.a.value, 0);
+  const sent = live.filter(m => m.from === rid).reduce((t, m) => t + m.a.value, 0);
+  const change = W().on ? lineupChange(rid, live, T, DATA.slots || []) : 0;
+  const amount = Math.round(change * (W().rates[typeOf(rid)] || 0));
+  return {got, sent, change, amount, pct: teamReturn(got, sent, amount)};
+}
+const lineupLine = sd => (W().on ? `<div class="mt lu">lineup <b class="${sd.change > 0 ? "good" : sd.change < 0 ? "bad" : ""}">${sd.change ? (sd.change > 0 ? "+" : "−") + Math.abs(sd.change).toFixed(1) + " pts/wk" : "no change"}</b>${sd.amount ? `, ${sgn(sd.amount)}` : ""}</div>` : "");
+const typeSel = team => {
+  if (!W().on) return "";
+  const t = typeOf(team.rid), ovr = !!W().types[team.rid], name = {contend: "Contend", retool: "Retool", rebuild: "Rebuild"};
+  return `<select class="ttype${ovr ? " ovr" : ""}" data-rid="${team.rid}" aria-label="${team.name} team type" title="${ovr ? "Set by you; choose the (app) option to go back to the app's grade" : "The app's grade; change it if the owner sees it differently"}">${TEAM_TYPES.map(k => `<option value="${k}"${k === t ? " selected" : ""}>${name[k]}${k === team.type ? " (app)" : ""}</option>`).join("")}</select>`;
+};
 const pickTotal = team => (W().on ? team.picks.reduce((a, p) => a + px(p.value), 0) : team.pick_value);
 function panel(team, hl, isMe, opts = {}) {
   const h = [];
-  h.push(`<div class="phead">${opts.removable ? `<button class="unpin" type="button" data-rid="${team.rid}" aria-label="Hide ${team.name}" title="Hide this roster">×</button>` : ""}<h2>${team.name}${who(team)}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}${opts.focus ? '<span class="focus">selected</span>' : ""}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span>${SEASONS.length ? `<span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span>` : ""}<span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(W().on ? team.players.reduce((a, p) => a + px(p.value), 0) : team.player_value)}</b></span><span>picks <b>${fmt(pickTotal(team))}</b></span></div></div>`);
+  h.push(`<div class="phead">${opts.removable ? `<button class="unpin" type="button" data-rid="${team.rid}" aria-label="Hide ${team.name}" title="Hide this roster">×</button>` : ""}<h2>${team.name}${who(team)}${isMe ? ' <span style="color:var(--accent)">· you</span>' : ""}${opts.focus ? '<span class="focus">selected</span>' : ""}${typeSel(team)}</h2><div class="meta"><span><b>${team.wins}-${team.losses}</b> · ${ord(team.rank)} of ${DATA.teams.length}</span>${SEASONS.length ? `<span>proj. ${SEASONS[0]} pick <b>${pad(team.proj_slot)}</b></span>` : ""}<span>startable <b>${team.startable}</b></span><span>core age <b>${team.core_age ? team.core_age.toFixed(1) : "–"}</b></span><span>players <b>${fmt(W().on ? team.players.reduce((a, p) => a + px(p.value), 0) : team.player_value)}</b></span><span>picks <b>${fmt(pickTotal(team))}</b></span></div></div>`);
   h.push(`<div class="cols"><span>Pos</span><span>Player</span><span>Team</span><span>Age</span><span>PPG</span><span title="Production vs price: rank at the position by PPG against rank by value. + produces better than priced.">P/V</span><span>Value</span></div>`);
   for (const pos of POS) {
     const ps = team.players.filter(p => p.pos === pos);
@@ -600,6 +623,11 @@ function render() {
   const ros = document.getElementById("rosters"), scrollX = ros.scrollLeft;
   ros.innerHTML = shown.map(rid => `<section class="panel" data-rid="${rid}" aria-label="${T[rid].name} roster">${panel(T[rid], hl, rid === ME, {focus: rid === other.rid, removable: pins.includes(rid) && !inTrade.includes(rid) && rid !== other.rid})}</section>`).join("");
   ros.scrollLeft = scrollX;
+  ros.querySelectorAll(".ttype").forEach(sl => sl.onchange = () => {
+    const rid = +sl.dataset.rid;
+    if (sl.value === T[rid].type) delete W().types[rid]; else W().types[rid] = sl.value;
+    save(); render();
+  });
   ros.querySelectorAll(".unpin").forEach(b => b.onclick = () => togglePin(+b.dataset.rid));
 
   // Clicking an asset forks the shown proposal into a custom trade (or edits the one in progress). From your roster it goes
@@ -633,7 +661,8 @@ function render() {
   const multi = teamsIn.length > 2;   // three or more teams: the trade takes the strip's full width and the deal list steps aside
   const gotOf = rid => R.filter(x => x.to === rid), gaveOf = rid => R.filter(x => x.from === rid);
   const tot = xs => xs.reduce((a, x) => a + x.a.value, 0);
-  const pctOf = rid => { const g = tot(gaveOf(rid)); return g ? Math.round(tot(gotOf(rid)) / g * 100) : null; };
+  const sides = Object.fromEntries([...new Set([...shown, ...R.flatMap(x => [x.from, x.to])])].map(rid => [rid, sideOf(rid, moves)]));
+  const pctOf = rid => (sides[rid] ? sides[rid].pct : null);
   const pcls = p => (p === null ? "" : (p >= 100 ? "good" : (p < 85 ? "bad" : "")));
   const li = x => `<li draggable="true" data-i="${x.idx}" data-from="${x.from}" title="Drag onto another team to send it there"><span class="il">${x.a.label}<small>from ${x.from === ME ? "you" : tname(x.from)}</small></span><span class="iv">${fmt(x.a.value)}</span>${custom ? `<button class="rm" type="button" data-i="${x.idx}" aria-label="Remove ${x.a.label}">×</button>` : ""}</li>`;
   const empty = `<li class="empty">nothing yet</li>`;
@@ -654,15 +683,17 @@ function render() {
       const p = pctOf(rid), got = gotOf(rid);
       return `<div class="mside${rid === ME ? " me" : ""}" data-drop="${rid}"><div class="mh"><span><b>${rid === ME ? "You" : tname(rid)}</b>${rid !== ME ? who(T[rid]) : ""} get${rid === ME ? "" : "s"}</span><span class="p ${pcls(p)}">${p === null ? "–" : p + "%"}</span></div>
         <ul class="side" style="list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:3px">${got.map(li).join("") || empty}</ul>
-        <div class="mt">gets <b>${fmt(tot(got))}</b> for <b>${fmt(tot(gaveOf(rid)))}</b> sent</div></div>`;
+        <div class="mt">gets <b>${fmt(tot(got))}</b> for <b>${fmt(tot(gaveOf(rid)))}</b> sent</div>${sides[rid] ? lineupLine(sides[rid]) : ""}</div>`;
     }).join("");
     const myP = pctOf(ME);
+    const dpOut = R.filter(x => x.from === ME).reduce((t, x) => t + x.a.dp, 0), dpIn = R.filter(x => x.to === ME).reduce((t, x) => t + x.a.dp, 0);
+    const pure = W().on && dpOut ? `<span class="pure">Pure DP: ${Math.round(dpIn / dpOut * 100)}%</span>` : "";
     const foot = custom
       ? `<p class="hint">Click rows on any roster to add or remove pieces. Drag a piece onto another team, here or on its roster, to send it there. ${multi ? "Clear brings the deal list back." : (deal ? "Ask, Target or Floor go back to the drafted deal." : "")}</p>`
       : `<div class="walk"><b>Walk away if</b> ${deal.walk}${dpNote()}.</div>`;
     right = `<div class="panel"><div class="custom-head" style="margin-top:0"><span>${title}</span>${custom ? `<button class="clear" type="button">Clear</button>` : ""}</div>
       <div class="mgrid">${blocks}</div>
-      <div class="tfoot"><span>Your return on what you send</span><span class="big ${pcls(myP)}">${myP === null ? "–" : myP + "%"}</span></div>
+      <div class="tfoot"><span>Your return on what you send</span>${pure}<span class="big ${pcls(myP)}">${myP === null ? "–" : myP + "%"}</span></div>
       ${isBase ? `<p class="why">${MULTI[baseIdx].why}</p>` : ""}${foot}</div>`;
   }
   rail.innerHTML = multi ? right : left + right;
@@ -707,6 +738,8 @@ function buildWeights() {
   const el = document.getElementById("weights"), w = W();
   el.innerHTML = `<label class="tog"><input type="checkbox" id="w-on"${w.on ? " checked" : ""}>Custom league weights</label>
     <span class="wctl wset"><label for="w-steep">Steepness</label><input type="range" id="w-steep" min="0.005" max="0.035" step="0.0005" value="${w.steepness}"><b id="w-steep-v"></b><span class="dp">DP 0.0235</span></span>
+    ${TEAM_TYPES.map(t => `<span class="wctl rate wset" title="Value per weekly point a trade adds to or costs a ${t} team's best lineup"><label for="w-rate-${t}">${t[0].toUpperCase() + t.slice(1)}</label><input type="range" id="w-rate-${t}" min="0" max="1000" step="10" value="${w.rates[t]}"><b id="w-rate-${t}-v"></b></span>`).join("")}
+    <span class="dp wset">per lineup point</span>
     <button type="button" class="reset wset" id="w-reset">Reset</button>`;
   const sync = () => {
     const w = W();
@@ -714,11 +747,14 @@ function buildWeights() {
     el.querySelectorAll(".wset").forEach(n => n.hidden = !w.on);
     document.getElementById("w-steep").value = w.steepness;
     document.getElementById("w-steep-v").textContent = w.steepness.toFixed(4);
+    for (const t of TEAM_TYPES) { document.getElementById(`w-rate-${t}`).value = w.rates[t]; document.getElementById(`w-rate-${t}-v`).textContent = w.rates[t]; }
   };
   const apply = () => { sync(); save(); render(); };
   document.getElementById("w-on").onchange = e => { W().on = e.target.checked; apply(); };
   document.getElementById("w-steep").oninput = e => { W().steepness = +e.target.value; apply(); };
-  document.getElementById("w-reset").onclick = () => { W().steepness = WEIGHT_DEFAULTS.steepness; apply(); };
+  for (const t of TEAM_TYPES) document.getElementById(`w-rate-${t}`).oninput = e => { W().rates[t] = +e.target.value; apply(); };
+  // Reset restores the sliders only: team type overrides record what owners said and are cleared one team at a time
+  document.getElementById("w-reset").onclick = () => { W().steepness = WEIGHT_DEFAULTS.steepness; W().rates = {...WEIGHT_DEFAULTS.rates}; apply(); };
   sync();
 }
 buildWeights();
