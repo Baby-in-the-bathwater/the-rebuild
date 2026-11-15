@@ -1,0 +1,35 @@
+name: Checks
+
+# Runs on every pull request into main and on every push to main. Required to pass before a
+# pull request can merge (the "Main" ruleset). Nothing here touches Sleeper or any league.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -r requirements.txt
+      - name: Python tests
+        run: python -m unittest discover tests -v
+      - name: Trade board tests
+        run: node --test tests/board_weights.test.js
+      - name: CLI loads
+        run: python -m rebuild --help
+      - name: Public-data guard (no league ids, run output or cache)
+        run: python .github/scripts/public_data_guard.py
