@@ -43,3 +43,20 @@ export function fixtureLookup(omit: Iterable<string> = []): Lookup {
 }
 
 export const lookup: Lookup = fixtureLookup();
+
+/** A `fetch` over `http` that counts requests per url, tracks how many are in flight at once, and answers 404 for unknown urls. */
+export function countingFetch(pages: Record<string, string> = http) {
+  const calls = new Map<string, number>();
+  const state = { total: 0, inFlight: 0, maxInFlight: 0 };
+  const fake = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.set(url, (calls.get(url) ?? 0) + 1);
+    state.total++;
+    state.maxInFlight = Math.max(state.maxInFlight, ++state.inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    state.inFlight--;
+    const body = pages[url];
+    return body === undefined ? new Response("not found", { status: 404 }) : new Response(body, { status: 200 });
+  }) as typeof fetch;
+  return { fetch: fake, calls, state, reset: () => { calls.clear(); state.total = 0; } };
+}
