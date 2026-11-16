@@ -24,7 +24,7 @@ class TeamTypesTest(unittest.TestCase):
         def fn(league_, values, rid, bm, own_bundle):
             if rid == 2:
                 raise KeyError("no history row")
-            return {"mode": "contend"}
+            return {"mode": "contend", "row": {}}
 
         self.assertEqual(grade.team_types(league, None, None, None, grade_fn=fn), {1: "contend", 2: "retool"})
 

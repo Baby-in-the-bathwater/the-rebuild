@@ -125,12 +125,13 @@ def grade(league, values, rid, bm, own_bundle):
 
 
 def team_types(league, values, bm, own_bundle, grade_fn=grade):
-    """Every team's call (contend, retool or rebuild) from the same grade the user's team gets. A team that cannot be
-    graded (no history row, say) is called retool, the middle of the road."""
+    """Every team's call (contend, retool or rebuild) from the same grade the user's team gets. A team with no metrics
+    row (the grade's `row` is None) or that cannot be graded at all is called retool, the middle of the road."""
     out = {}
     for rid in league.team_name:
         try:
-            out[rid] = grade_fn(league, values, rid, bm, own_bundle)["mode"]
+            g = grade_fn(league, values, rid, bm, own_bundle)
+            out[rid] = "retool" if g["row"] is None else g["mode"]
         except Exception:
             out[rid] = "retool"
     return out

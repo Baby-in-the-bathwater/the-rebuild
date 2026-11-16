@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 from rebuild import cli, engine, fetch, trade_history
-from rebuild.grade import grade
+from rebuild.grade import grade, team_types
 from rebuild.league import League
 from rebuild.values import Values
 from tests import synth_league
@@ -82,6 +82,19 @@ class GradeTest(unittest.TestCase):
         self.assertIsNone(g["row"])
         self.assertEqual(g["pct"], {})
         self.assertIn(g["mode"], {"contend", "retool", "rebuild"})
+
+    def test_team_types_calls_a_team_with_no_metrics_row_retool(self):
+        i = synth_league.make_inputs()
+        lg = League(i["pull"], i["players"], i["state"])
+        values = Values.from_csv(i["values_csv"], lg.fmt["superflex"])
+        bundle = lg.bundle()
+        bundle["matchups"] = {wk: [m for m in ms if m["roster_id"] != 4] for wk, ms in bundle["matchups"].items()}
+        self.assertIsNone(grade(lg, values, 4, i["benchmark"], bundle)["row"])
+        self.assertIsNotNone(grade(lg, values, 6, i["benchmark"], bundle)["row"])
+        types = team_types(lg, values, i["benchmark"], bundle)
+        self.assertEqual(types[4], "retool")   # graded on its own it would be a contender
+        self.assertEqual(types[6], "contend")
+        self.assertEqual(set(types), set(lg.team_name))
 
 
 QUIET = lambda s: None  # noqa: E731
