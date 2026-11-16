@@ -2,12 +2,14 @@ name: Checks
 
 # Runs on every pull request into main and on every push to main. Required to pass before a
 # pull request can merge (the "Main" ruleset). Nothing here touches Sleeper or any league.
+# The deploy workflow also calls it, so nothing deploys unless these pass.
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
