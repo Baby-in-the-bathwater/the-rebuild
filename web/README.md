@@ -4,7 +4,7 @@ A static TypeScript site. A Web Worker will run the Python engine in the browser
 
 ## Prerequisites
 
-- Node 22 or newer
+- Node 22.12 or newer
 - pnpm
 
 Install with `pnpm install --frozen-lockfile`. The esbuild and Wrangler's workerd binary need their install scripts; they are approved in `pnpm-workspace.yaml` (`allowBuilds`), so the install runs unattended.

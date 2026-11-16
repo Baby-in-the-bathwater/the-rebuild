@@ -8,13 +8,6 @@
     "test": "vitest run",
     "preview": "wrangler dev"
   },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "12.21.0",
-      "onFail": "download"
-    }
-  },
   "packageManager": "pnpm@12.21.0",
   "type": "module",
   "devDependencies": {
