@@ -1,4 +1,6 @@
+import json
 import os
+import re
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -7,14 +9,65 @@ from rebuild import board, grade, trades
 
 
 class RenderTest(unittest.TestCase):
-    def test_render_inlines_weights_logic(self):
+    PLACEHOLDERS = ("__TITLE__", "__CSS__", "__BODY__", "__DATA__", "__WEIGHTS_JS__", "__BOARD_JS__")
+
+    def render(self, data):
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "board.html")
-            board.render({"league": "L"}, out)
+            board.render(data, out)
             with open(out, encoding="utf-8") as f:
-                html = f.read()
+                return f.read()
+
+    def test_render_inlines_weights_logic(self):
+        html = self.render({"league": "L"})
         self.assertIn("function curveValue", html)
-        self.assertNotIn("/*__WEIGHTS_JS__*/", html)
+
+    def test_render_inlines_every_part(self):
+        html = self.render({"league": "L"})
+        parts = board.sources()
+        self.assertEqual(set(parts), {"css", "body", "weights_js", "board_js"})
+        for name, text in parts.items():
+            self.assertTrue(text.strip(), name)
+            self.assertIn(text, html, name)
+        self.assertIn("<title>L Trade Board</title>", html)
+
+    def test_board_script_reads_data_from_the_window(self):
+        js = board.sources()["board_js"]
+        self.assertTrue(js.startswith("const DATA = window.__BOARD_DATA__;\n"))
+        self.assertIn('"rebuild-board-" + DATA.league_id', js)
+
+    def test_data_is_assigned_once_and_parses_back(self):
+        data = {"league": "L", "teams": [{"name": "Zed's \u2603 </script><b>"}], "n": 1.5}
+        html = self.render(data)
+        marker = "window.__BOARD_DATA__ = "
+        self.assertEqual(html.count(marker), 1)
+        start = html.index(marker) + len(marker)
+        end = html.index(";\n</script>", start)
+        self.assertEqual(json.loads(html[start:end]), data)
+
+    def test_script_in_a_team_name_does_not_close_the_script_element(self):
+        html = self.render({"league": "L", "teams": [{"name": "</script><img src=x>"}]})
+        self.assertNotIn("</script><img", html)
+        self.assertEqual(html.count("<script"), html.count("</script>"))
+        self.assertEqual(html.count("<script"), 3)
+
+    def test_no_placeholder_is_left(self):
+        html = self.render({"league": "L"})
+        for ph in self.PLACEHOLDERS:
+            self.assertNotIn(ph, html)
+
+    def test_placeholder_text_in_data_is_kept_as_data(self):
+        html = self.render({"league": "L", "teams": [{"name": "__CSS__"}]})
+        self.assertIn('"name": "__CSS__"', html)
+
+    def test_file_references_nothing_local(self):
+        html = self.render({"league": "L"})
+        urls = re.findall(r'(?:href|src)\s*=\s*["\']([^"\']+)', html)
+        self.assertTrue(urls)
+        for u in urls:
+            self.assertTrue(u.startswith("https://fonts.googleapis.com/"), u)
+        self.assertNotIn("@import", html)
+        self.assertNotRegex(html, r"url\(\s*[\"']?(?!data:|#)")
 
 
 class TeamTypesTest(unittest.TestCase):
