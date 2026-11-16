@@ -42,13 +42,29 @@ export async function fetchLeagueTexts(
   return { league, texts };
 }
 
+/** A stored entry is usable only if it has the shape we wrote: anything else is treated as not stored. */
+function wellFormed(entry: unknown, id: string): entry is SeasonEntry {
+  if (typeof entry !== "object" || entry === null) return false;
+  const { texts, status } = entry as Partial<SeasonEntry>;
+  if (typeof status !== "string" || typeof texts !== "object" || texts === null) return false;
+  const league = texts[`league/${id}`];
+  if (typeof league !== "string") return false;
+  try {
+    const parsed = JSON.parse(league);
+    return typeof parsed === "object" && parsed !== null;
+  } catch {
+    return false;
+  }
+}
+
 function reusable(
-  entry: SeasonEntry | undefined,
+  entry: unknown,
+  id: string,
   week: number | null,
   now: Date,
   fresh: boolean | undefined,
 ): entry is SeasonEntry {
-  if (!entry) return false;
+  if (!wellFormed(entry, id)) return false;
   if (entry.status === "complete") return true;
   const age = now.getTime() - Date.parse(entry.stored);
   return !fresh && age >= 0 && age < SEASON_TTL_MS && entry.week === week;
@@ -67,14 +83,14 @@ export async function collectLeague(
   let next: string | null = leagueId;
   while (next && next !== "0" && chain.length < MAX_SEASONS) {
     const id: string = next;
-    let entry: SeasonEntry | undefined;
+    let entry: unknown;
     try {
-      entry = await store.get<SeasonEntry>(`season:${id}`);
+      entry = await store.get<unknown>(`season:${id}`);
     } catch {
       entry = undefined;
     }
     let leagueText: string;
-    if (reusable(entry, state.week, now, opts.fresh)) {
+    if (reusable(entry, id, state.week, now, opts.fresh)) {
       Object.assign(texts, entry.texts);
       leagueText = entry.texts[`league/${id}`] ?? "{}";
     } else {
@@ -99,6 +115,7 @@ export async function collectLeague(
     opts.onSeason?.(chain.length);
     const previous = JSON.parse(leagueText).previous_league_id;
     next = previous == null ? null : String(previous);
+    if (next !== null && chain.includes(next)) break;
   }
   return { found: chain.length > 0, chain, texts };
 }

@@ -39,7 +39,8 @@ describe("collectLeague", () => {
     f.reset();
     const again = await collectLeague(api, store, meta.league_id, state, minutes(29));
     expect(f.state.total).toBe(0);
-    expect(again.texts).toBeDefined();
+    expect(again.chain).toEqual(["L1", "L0"]);
+    for (const [key, text] of Object.entries(again.texts)) expect(text).toBe(responses.get(key));
 
     for (const [when, s, opts] of [
       [minutes(31), state, {}],
@@ -83,5 +84,66 @@ describe("collectLeague", () => {
     const f = countingFetch(pages);
     const got = await collectLeague(createSleeper({ fetch: f.fetch }), memoryStore(), "S0", state, NOW);
     expect(got.chain).toHaveLength(MAX_SEASONS);
+  });
+  describe("bad stored entries", () => {
+    const league = (id: string, extra: object = {}) => JSON.stringify({ league_id: id, status: "complete", season: "2025", ...extra });
+    const seed = async (entry: unknown) => {
+      const store = memoryStore();
+      await store.set("season:L0", entry);
+      return store;
+    };
+    const cases: Array<[string, unknown]> = [
+      ["no texts", { status: "complete", stored: NOW.toISOString(), season: "2025", week: 6 }],
+      ["no league key", { status: "complete", stored: NOW.toISOString(), season: "2025", week: 6, texts: { "league/other": "{}" } }],
+      ["league text that is not JSON", { status: "complete", stored: NOW.toISOString(), season: "2025", week: 6, texts: { "league/L0": "oops" } }],
+      ["status that is not a string", { status: 3, stored: NOW.toISOString(), texts: { "league/L0": "{}" } }],
+    ];
+    for (const [name, entry] of cases) {
+      it(`refetches over ${name}`, async () => {
+        const store = await seed(entry);
+        const { f, api } = setup();
+        const got = await collectLeague(api, store, meta.league_id, state, NOW);
+        expect(got.chain).toEqual(["L1", "L0"]);
+        for (const [key, text] of Object.entries(got.texts)) expect(text).toBe(responses.get(key));
+        expect([...f.calls.keys()].some((u) => u.endsWith("/league/L0"))).toBe(true);
+        const stored = await store.get<{ texts: Record<string, string> }>("season:L0");
+        expect(stored?.texts["league/L0"]).toBe(responses.get("league/L0"));
+      });
+    }
+    it("stops when previous_league_id loops back into the chain", async () => {
+      const f = countingFetch({
+        "https://api.sleeper.app/v1/league/A": league("A", { previous_league_id: "B" }),
+        "https://api.sleeper.app/v1/league/B": league("B", { previous_league_id: "A" }),
+      });
+      const got = await collectLeague(createSleeper({ fetch: f.fetch }), memoryStore(), "A", state, NOW);
+      expect(got.chain).toEqual(["A", "B"]);
+    });
+    it("stops at the id \"0\" and keeps the leagues found", async () => {
+      const f = countingFetch({ "https://api.sleeper.app/v1/league/A": league("A", { previous_league_id: "0" }) });
+      const got = await collectLeague(createSleeper({ fetch: f.fetch }), memoryStore(), "A", state, NOW);
+      expect(got.chain).toEqual(["A"]);
+    });
+    it("stops at a missing earlier league and keeps the leagues found", async () => {
+      const f = countingFetch({ "https://api.sleeper.app/v1/league/A": league("A", { previous_league_id: "gone" }) });
+      const got = await collectLeague(createSleeper({ fetch: f.fetch }), memoryStore(), "A", state, NOW);
+      expect(got).toMatchObject({ found: true, chain: ["A"] });
+      expect(Object.keys(got.texts)).toContain("league/A");
+    });
+  });
+  it("stores nothing for a season whose endpoint fails, and fetches it again next time", async () => {
+    const store = memoryStore();
+    const pages = Object.fromEntries([...responses.keys()].filter((k) => k.startsWith("league/") || k.startsWith("draft/")).map((k) => [`https://api.sleeper.app/v1/${k}`, responses.get(k)!]));
+    let failing = true;
+    const f = countingFetch(pages);
+    const flaky = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      failing && String(input).endsWith("/league/L1/users") ? new Response("", { status: 500 }) : f.fetch(input, init)) as typeof fetch;
+    const api = createSleeper({ fetch: flaky, sleep: async () => {} });
+    await expect(collectLeague(api, store, meta.league_id, state, NOW)).rejects.toThrow();
+    expect(await store.get("season:L1")).toBeUndefined();
+    failing = false;
+    f.reset();
+    const got = await collectLeague(api, store, meta.league_id, state, NOW);
+    expect(got.chain).toEqual(["L1", "L0"]);
+    expect([...f.calls.keys()].some((u) => u.includes("/league/L1"))).toBe(true);
   });
 });

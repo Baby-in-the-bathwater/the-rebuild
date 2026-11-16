@@ -54,10 +54,57 @@ describe("Sleeper.text", () => {
     expect(await createSleeper({ fetch: fake }).text("x")).toBeNull();
     expect(urls).toHaveLength(1);
   });
-  it("reports each call", async () => {
+  it("reports each finished attempt, whether it got a response or failed", async () => {
     const seen: number[] = [];
-    const api = createSleeper({ fetch: scripted([200]).fake, onCall: (n) => seen.push(n) });
-    await Promise.all([api.text("a"), api.text("b")]);
-    expect(seen).toEqual([1, 2]);
+    const api = createSleeper({ fetch: scripted([0, 500, 200]).fake, sleep: sleeps().sleep, onCall: (n) => seen.push(n) });
+    await api.text("a");
+    expect(seen).toEqual([1, 2, 3]);
+  });
+  it("does not retry a 4xx other than 404 and 429", async () => {
+    const { fake, urls } = scripted([403]);
+    const s = sleeps();
+    await expect(createSleeper({ fetch: fake, sleep: s.sleep }).text("x")).rejects.toThrow(SleeperError);
+    expect(urls).toHaveLength(1);
+    expect(s.waits).toEqual([]);
+  });
+  it("treats an empty 200 as a failed attempt", async () => {
+    const s = sleeps();
+    const { fake } = scripted([200, 200]);
+    let n = 0;
+    const f = (async (u: string) => (n++ === 0 ? new Response("", { status: 200 }) : fake(u))) as typeof fetch;
+    expect(await createSleeper({ fetch: f, sleep: s.sleep }).text("x")).toBe("[1, 2]");
+    expect(s.waits).toEqual([1000]);
+  });
+  it("aborts an attempt that hangs and tries again", async () => {
+    const s = sleeps();
+    let n = 0;
+    const signals: AbortSignal[] = [];
+    const f = ((_url: string, init?: RequestInit) => {
+      signals.push(init!.signal!);
+      if (n++ > 0) return Promise.resolve(new Response("ok", { status: 200 }));
+      return new Promise<Response>((_, reject) => init!.signal!.addEventListener("abort", () => reject(new Error("aborted"))));
+    }) as unknown as typeof fetch;
+    expect(await createSleeper({ fetch: f, sleep: s.sleep, timeoutMs: 5 }).text("x")).toBe("ok");
+    expect(signals[0]!.aborted).toBe(true);
+    expect(s.waits).toEqual([1000]);
+  });
+  it("respects the cap on its own", async () => {
+    let flying = 0;
+    let peak = 0;
+    const f = (async () => {
+      peak = Math.max(peak, ++flying);
+      await new Promise((r) => setTimeout(r, 0));
+      flying--;
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+    const api = createSleeper({ fetch: f, concurrency: 2 });
+    await Promise.all(Array.from({ length: 10 }, (_, i) => api.text(`p${i}`)));
+    expect(peak).toBe(2);
+  });
+  it("is not stuck after a request fails", async () => {
+    const f = (async (u: string) => new Response("ok", { status: u.endsWith("/bad") ? 403 : 200 })) as unknown as typeof fetch;
+    const api = createSleeper({ fetch: f, concurrency: 1 });
+    const results = await Promise.allSettled([api.text("bad"), api.text("a"), api.text("b")]);
+    expect(results.map((r) => r.status)).toEqual(["rejected", "fulfilled", "fulfilled"]);
   });
 });

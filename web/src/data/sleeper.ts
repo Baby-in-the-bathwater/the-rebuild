@@ -22,14 +22,16 @@ export function createSleeper(opts: {
   fetch: Fetch;
   concurrency?: number;
   retries?: number;
+  timeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
   onCall?: (done: number) => void;
 }): Sleeper {
   const cap = opts.concurrency ?? 8;
   const attempts = opts.retries ?? 4;
+  const timeoutMs = opts.timeoutMs ?? 30000;
   const sleep = opts.sleep ?? defaultSleep;
   let inFlight = 0;
-  let done = 0;
+  let finished = 0;
   const waiting: Array<() => void> = [];
 
   const acquire = async () => {
@@ -46,24 +48,37 @@ export function createSleeper(opts: {
     else inFlight--;
   };
 
+  /** One request, aborted if it (or reading its body) takes longer than timeoutMs. */
+  const attempt = async (path: string): Promise<{ status: number; body: string }> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      api.calls++;
+      const res = await opts.fetch(`${SLEEPER_BASE}/${path}`, { signal: controller.signal });
+      return { status: res.status, body: res.status === 200 ? await res.text() : "" };
+    } finally {
+      clearTimeout(timer);
+      opts.onCall?.(++finished);
+    }
+  };
+
   const api: Sleeper = {
     calls: 0,
     async text(path) {
       await acquire();
       try {
-        for (let attempt = 1; attempt <= attempts; attempt++) {
-          let wait: number;
+        for (let n = 1; n <= attempts; n++) {
+          let wait = 1000 * n;
           try {
-            api.calls++;
-            const res = await opts.fetch(`${SLEEPER_BASE}/${path}`);
-            opts.onCall?.(++done);
-            if (res.status === 200) return await res.text();
-            if (res.status === 404) return null;
-            wait = res.status === 429 ? 5000 * attempt : 1000 * attempt;
-          } catch {
-            wait = 1000 * attempt;
+            const { status, body } = await attempt(path);
+            if (status === 200 && body !== "") return body;
+            if (status === 404) return null;
+            if (status === 429) wait = 5000 * n;
+            else if (status >= 400 && status < 500) throw new SleeperError(`Sleeper answered ${status}`);
+          } catch (error) {
+            if (error instanceof SleeperError) throw error;
           }
-          if (attempt < attempts) await sleep(wait);
+          if (n < attempts) await sleep(wait);
         }
         throw new SleeperError();
       } finally {
