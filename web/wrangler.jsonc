@@ -1,5 +1,12 @@
 {
+  // Static assets only: no Worker script and no account id. The account comes from
+  // CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in the shell or in CI secrets.
+  // Deploy with `wrangler deploy --env staging` or `--env production`.
   "name": "the-rebuild",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./dist", "not_found_handling": "single-page-application" }
+  "assets": { "directory": "./dist", "not_found_handling": "single-page-application" },
+  "env": {
+    "staging": { "name": "the-rebuild-staging" },
+    "production": { "name": "the-rebuild" }
+  }
 }

@@ -25,4 +25,35 @@ Install with `pnpm install --frozen-lockfile`. The esbuild and Wrangler's worker
 
 ## Deploying
 
-`wrangler.jsonc` points at `dist/` and holds no account id or token. Supply credentials through your environment or CI secrets, never in the repo.
+`wrangler.jsonc` points at `dist/` and holds no account id or token. It defines two environments:
+
+| Environment | Worker name | Deployed by |
+|-|-|-|
+| `staging` | `the-rebuild-staging` | every push to `main` that touches `web/` or `rebuild/` |
+| `production` | `the-rebuild` | the Deploy workflow, run by hand |
+
+Which Cloudflare account a deploy goes to depends only on two values, never on a file in the repo:
+
+- `CLOUDFLARE_API_TOKEN`: an API token made from Cloudflare's "Edit Cloudflare Workers" template.
+- `CLOUDFLARE_ACCOUNT_ID`: the id of the account to deploy into.
+
+### From GitHub
+
+The Deploy workflow (`.github/workflows/deploy.yml`) runs the checks, builds the site, deploys it and then loads the front page. Set the two values as Actions secrets, either on the repository or on a GitHub environment named `staging` or `production` (an environment's secrets win over the repository's). In a repository with neither, the deploy is skipped with a notice.
+
+To deploy by hand: Actions, then Deploy, then "Run workflow", and pick the environment. Or:
+
+```
+gh workflow run deploy.yml -f environment=production
+```
+
+Moving to another Cloudflare account means replacing the two secrets. No file changes.
+
+### From a shell
+
+```
+export CLOUDFLARE_API_TOKEN=...
+export CLOUDFLARE_ACCOUNT_ID=...
+pnpm build
+pnpm exec wrangler deploy --env staging
+```
