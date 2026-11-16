@@ -1,13 +1,13 @@
 """Save an engine inputs dict to a folder and read it back, so a run can be recorded and replayed without the network.
 The engine never imports this module: it belongs to the command line, which does the disk work.
 
-Layout: meta.json (version, run_at, options, chain, benchmark_note, team), state.json, players.json, pull.json,
+Layout: meta.json (version, run_at, options, chain, benchmark_note, team, history_ids, snapshot_shas), state.json, players.json, pull.json,
 benchmark.json, history/<league id>.json, values.csv, snapshot_index.json (the index, or null), snapshots/<sha>.csv."""
 import json
 import os
 import re
 
-VERSION = 1
+from .engine import INPUTS_VERSION
 
 
 def _write_json(path, value):
@@ -46,11 +46,13 @@ def save(inputs: dict, folder: str, team: str) -> None:
     bm = inputs["benchmark"]
     if isinstance(bm, dict):
         bm = {k: v for k, v in bm.items() if k != "_path"}
-    _clear(folder, "history", ".json")
-    _clear(folder, "snapshots", ".csv")
+    if os.path.isfile(os.path.join(folder, "meta.json")):  # an earlier recording: replace its files, leave any other folder alone
+        _clear(folder, "history", ".json")
+        _clear(folder, "snapshots", ".csv")
     _write_json(os.path.join(folder, "meta.json"), {
         "version": inputs["version"], "run_at": inputs["run_at"], "options": inputs["options"], "chain": inputs["chain"],
-        "benchmark_note": inputs["benchmark_note"], "team": team})
+        "benchmark_note": inputs["benchmark_note"], "team": team,
+        "history_ids": sorted(inputs["history"]), "snapshot_shas": sorted(inputs["snapshots"])})
     for key in ("state", "players", "pull"):
         _write_json(os.path.join(folder, key + ".json"), inputs[key])
     _write_json(os.path.join(folder, "benchmark.json"), bm)
@@ -66,13 +68,11 @@ def _read(folder, name, as_json=True):
     path = os.path.join(folder, name)
     if not os.path.isfile(path):
         raise ValueError(f"replay folder {folder} is missing {name}")
-    with open(path, encoding="utf-8", newline="") as f:
-        return json.load(f) if as_json else f.read()
-
-
-def _files(folder, sub, suffix):
-    d = os.path.join(folder, sub)
-    return sorted(n[:-len(suffix)] for n in os.listdir(d) if n.endswith(suffix)) if os.path.isdir(d) else []
+    try:
+        with open(path, encoding="utf-8", newline="") as f:
+            return json.load(f) if as_json else f.read()
+    except (ValueError, OSError) as e:  # bad JSON or bytes that are not UTF-8 (both are ValueErrors), or an unreadable file
+        raise ValueError(f"replay folder {folder} has a bad {name}") from e
 
 
 def load(folder: str) -> tuple[dict, str]:
@@ -81,15 +81,20 @@ def load(folder: str) -> tuple[dict, str]:
     bad = ValueError(f"replay folder {folder} has a bad meta.json")
     if not isinstance(meta, dict):
         raise bad
-    if meta.get("version") != VERSION:
-        raise ValueError(f"replay folder {folder} is version {meta.get('version')}, expected {VERSION}")
-    if any(k not in meta for k in ("run_at", "options", "chain", "benchmark_note", "team")):
+    if meta.get("version") != INPUTS_VERSION:
+        raise ValueError(f"replay folder {folder} is version {meta.get('version')}, expected {INPUTS_VERSION}")
+    if any(k not in meta for k in ("run_at", "options", "chain", "benchmark_note", "team", "history_ids", "snapshot_shas")):
         raise bad
+    for key in ("history_ids", "snapshot_shas"):
+        if not isinstance(meta[key], list) or not all(isinstance(n, str) and re.fullmatch(r"[A-Za-z0-9_-]+", n) for n in meta[key]):
+            raise bad
     inputs = {key: meta[key] for key in ("version", "run_at", "options", "chain", "benchmark_note")}
     for key in ("state", "players", "pull", "benchmark"):
         inputs[key] = _read(folder, key + ".json")
-    inputs["history"] = {lid: _read(folder, f"history/{lid}.json") for lid in _files(folder, "history", ".json")}
+    if not isinstance(inputs["pull"], dict) or "league" not in inputs["pull"]:
+        raise ValueError(f"replay folder {folder} has a bad pull.json")
+    inputs["history"] = {lid: _read(folder, f"history/{lid}.json") for lid in meta["history_ids"]}
     inputs["values_csv"] = _read(folder, "values.csv", as_json=False)
     inputs["snapshot_index"] = _read(folder, "snapshot_index.json")
-    inputs["snapshots"] = {sha: _read(folder, f"snapshots/{sha}.csv", as_json=False) for sha in _files(folder, "snapshots", ".csv")}
+    inputs["snapshots"] = {sha: _read(folder, f"snapshots/{sha}.csv", as_json=False) for sha in meta["snapshot_shas"]}
     return inputs, meta["team"]

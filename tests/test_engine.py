@@ -144,6 +144,50 @@ class InputsFolderTest(unittest.TestCase):
             self.assertEqual(set(loaded["snapshots"]), {"aaa"})
             self.assertTrue(os.path.exists(os.path.join(d, "notes.txt")))
 
+    def test_missing_listed_history_or_snapshot_file_is_noticed(self):
+        i = dict(synth_league.make_inputs(), snapshots={"aaa": "x", "bbb": "y"})
+        for rel, msg in ((os.path.join("history", f"{sorted(i['history'])[0]}.json"), "history/%s.json"), (os.path.join("snapshots", "bbb.csv"), "snapshots/bbb.csv")):
+            with tempfile.TemporaryDirectory() as d:
+                inputs.save(i, d, "Team 3")
+                os.remove(os.path.join(d, rel))
+                with self.assertRaisesRegex(ValueError, "replay folder .* is missing " + (msg % sorted(i["history"])[0] if "%s" in msg else msg).replace(".", r"\.")):
+                    inputs.load(d)
+
+    def test_unlisted_files_are_ignored_and_listing_is_required(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(i, d, "Team 3")
+            os.makedirs(os.path.join(d, "snapshots"), exist_ok=True)
+            open(os.path.join(d, "snapshots", "zzz.csv"), "w").close()
+            loaded, _ = inputs.load(d)
+            self.assertNotIn("zzz", loaded["snapshots"])
+            with open(os.path.join(d, "meta.json"), encoding="utf-8") as f:
+                meta = json.load(f)
+            del meta["snapshot_shas"]
+            with open(os.path.join(d, "meta.json"), "w", encoding="utf-8") as f:
+                json.dump(meta, f)
+            with self.assertRaisesRegex(ValueError, "has a bad meta.json"):
+                inputs.load(d)
+
+    def test_structurally_wrong_files_name_the_file(self):
+        i = synth_league.make_inputs()
+        for name, content in (("players.json", "{not json"), ("pull.json", "[]"), ("pull.json", '{"x": 1}')):
+            with tempfile.TemporaryDirectory() as d:
+                inputs.save(i, d, "Team 3")
+                with open(os.path.join(d, name), "w") as f:
+                    f.write(content)
+                with self.assertRaisesRegex(ValueError, "replay folder .* has a bad " + name.replace(".", r"\.")):
+                    inputs.load(d)
+
+    def test_saving_leaves_files_in_a_folder_that_is_not_a_recording(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "history"))
+            keep = os.path.join(d, "history", "mine.json")
+            open(keep, "w").close()
+            inputs.save(i, d, "Team 3")
+            self.assertTrue(os.path.exists(keep))
+
     def test_bad_meta_json(self):
         i = synth_league.make_inputs()
         for bad in ("[]", '{"version": 1}'):
@@ -213,6 +257,15 @@ class BuildReportTest(unittest.TestCase):
     def test_preseason_league(self):
         r = engine.build_report(synth_league.make_inputs(week=0), "Team 3", log=QUIET)
         self.assertEqual(r["summary"]["week"], 0)
+
+    def test_run_at_with_z_works_and_a_naive_one_is_refused(self):
+        i = synth_league.make_inputs()
+        z = dict(i, run_at="2026-11-16T12:00:00Z")
+        offset = dict(i, run_at="2026-11-16T12:00:00+00:00")
+        self.assertEqual(json.dumps(engine.build_report(z, "Team 3", log=QUIET)), json.dumps(engine.build_report(offset, "Team 3", log=QUIET)))
+        for bad in ("2026-01-01T00:00:00", "yesterday"):
+            with self.assertRaisesRegex(ValueError, "run_at must be an ISO timestamp with a timezone"):
+                engine.build_report(dict(i, run_at=bad), "Team 3", log=QUIET)
 
     def test_wrong_version_is_refused(self):
         i = synth_league.make_inputs()
@@ -322,6 +375,29 @@ class RecordReplayTest(unittest.TestCase):
             self.assertEqual(self.read(os.path.join(tmp, "a")), self.read(os.path.join(tmp, "b")))
             with open(os.path.join(tmp, "rec", "meta.json"), encoding="utf-8") as f:
                 self.assertIs(json.load(f)["options"]["history"], False)
+
+    def test_replay_refuses_flags_that_only_affect_gathering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            rec = os.path.join(tmp, "rec")
+            for extra in (["--no-history"], ["--threads", "12"], ["--cache-dir", tmp], ["--league", "1"], ["--pool"]):
+                err = io.StringIO()
+                with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                    cli.main(["--replay", rec, *extra])
+                self.assertEqual(cm.exception.code, 2)
+                self.assertIn(f"--replay takes its data from the recording; remove {extra[0]}", err.getvalue())
+            self.assertEqual(self.replay(tmp, "b", "--team", "Team 3"), 0)
+
+    def test_record_to_an_existing_file_exits_2(self):
+        i = synth_league.make_inputs()
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cli, "gather", return_value=i), contextlib.redirect_stderr(err):
+            target = os.path.join(tmp, "afile")
+            open(target, "w").close()
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = cli.main(["--league", "1", "--team", "Team 3", "--out", os.path.join(tmp, "a"), "--record", target], api=mock.Mock(calls=0))
+        self.assertEqual(code, 2)
+        self.assertIn("the report was written, the recording was not saved", err.getvalue())
 
     def test_replay_unknown_team(self):
         with tempfile.TemporaryDirectory() as tmp:

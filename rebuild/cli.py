@@ -23,6 +23,11 @@ from .sleeper import Sleeper
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+# options that only shape the gathering, which --replay skips
+REPLAY_IGNORED = ("--league", "--pool", "--pool-target", "--crawl-seconds", "--threads", "--benchmarks", "--cache-dir",
+                  "--refresh-values", "--no-history", "--no-trade-history")
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(prog="rebuild", description="Grade a Sleeper dynasty roster against what wins its format and draft the trades.")
     ap.add_argument("--league", help="Sleeper league id (the number in the league URL; required unless --replay)")
@@ -44,6 +49,13 @@ def parse_args(argv=None):
     a = ap.parse_args(argv)
     if a.record and a.replay:
         ap.error("use --record or --replay, not both")
+    if a.replay:
+        # a second parse into a namespace that already holds a sentinel for every option: defaults are not applied, so what differs was typed
+        unset = object()
+        given = ap.parse_args(argv, namespace=argparse.Namespace(**{act.dest: unset for act in ap._actions}))
+        for flag in REPLAY_IGNORED:
+            if getattr(given, flag[2:].replace("-", "_")) is not unset:
+                ap.error(f"--replay takes its data from the recording; remove {flag}")
     if not a.replay and not (a.league and a.team):
         ap.error("--league and --team are required (unless --replay)")
     return a
@@ -183,7 +195,7 @@ def main(argv=None, api=None):
     if a.record:
         try:
             inputs_mod.save(gathered, a.record, team)
-        except ValueError as e:
+        except (ValueError, OSError) as e:
             print(f"error: {e}; the report was written, the recording was not saved", file=sys.stderr)
             return 2
         print(f"  recording    {a.record} (holds the league's data; keep it out of public repos)")

@@ -37,6 +37,12 @@ def build_report(inputs: dict, team: str, *, log=print, stages: dict | None = No
     dict it is filled with each intermediate result: league, assets, grade, ledger, deals, three_team_deals, trade_history."""
     if inputs.get("version") != INPUTS_VERSION:
         raise ValueError(f"inputs are version {inputs.get('version')}, expected {INPUTS_VERSION}")
+    try:
+        run_at = dt.datetime.fromisoformat(str(inputs["run_at"]).replace("Z", "+00:00"))
+    except (KeyError, ValueError):
+        run_at = None
+    if run_at is None or run_at.tzinfo is None:
+        raise ValueError("inputs run_at must be an ISO timestamp with a timezone")
 
     def keep(name, value):
         if stages is not None:
@@ -86,7 +92,7 @@ def build_report(inputs: dict, team: str, *, log=print, stages: dict | None = No
         log("pricing the league's trade history")
         try:
             th = thmod.build(bundles, league, values, inputs["snapshot_index"], inputs["snapshots"],
-                             now=dt.datetime.fromisoformat(inputs["run_at"]), log=log)
+                             now=run_at, log=log)
         except Exception as e:  # a gap in the snapshots, say: the rest of the report does not depend on it
             log(f"trade history skipped: {e}")
     keep("trade_history", th)
