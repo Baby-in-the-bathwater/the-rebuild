@@ -24,11 +24,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
       - run: pip install -r requirements.txt
       - name: Python tests
         run: python -m unittest discover tests -v
       - name: Trade board tests
         run: node --test tests/board_weights.test.js
+      - name: Web install
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Web type-check
+        working-directory: web
+        run: pnpm typecheck
+      - name: Web tests
+        working-directory: web
+        run: pnpm test
+      - name: Web build
+        working-directory: web
+        run: pnpm build
       - name: CLI loads
         run: python -m rebuild --help
       - name: Public-data guard (no league ids, run output or cache)
