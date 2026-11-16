@@ -1,4 +1,5 @@
 """Render the interactive trade board (one HTML file, no server) from the grade, ledger and deals."""
+import html as html_lib
 import json
 import os
 import re
@@ -103,9 +104,11 @@ def render(data, out_path):
     """One self-contained HTML file: the shell with the parts inlined and the data set on window.__BOARD_DATA__.
     Only the web-fonts link points outside the file."""
     parts = sources()
-    # `</` becomes `<\/` so a team name containing </script> cannot close the script element.
-    fill = {"__TITLE__": f"{data['league']} Trade Board", "__CSS__": parts["css"], "__BODY__": parts["body"],
-            "__DATA__": json.dumps(data).replace("</", "<\\/"), "__WEIGHTS_JS__": parts["weights_js"], "__BOARD_JS__": parts["board_js"]}
+    # `</` becomes `<\/` so a team name containing </script> cannot close the script element, and `<!--` becomes
+    # `<\u0021--` so it cannot start an HTML comment (which changes how the parser ends the script). Both stay valid JSON.
+    data_json = json.dumps(data).replace("</", "<\\/").replace("<!--", "<\\u0021--")
+    fill = {"__TITLE__": html_lib.escape(f"{data['league']} Trade Board"), "__CSS__": parts["css"], "__BODY__": parts["body"],
+            "__DATA__": data_json, "__WEIGHTS_JS__": parts["weights_js"], "__BOARD_JS__": parts["board_js"]}
     # One pass, so text inside an inserted part is never mistaken for a placeholder.
     html = re.sub("|".join(map(re.escape, fill)), lambda m: fill[m.group(0)], _read(TEMPLATE))
     with open(out_path, "w", encoding="utf-8") as f:

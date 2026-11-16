@@ -51,6 +51,26 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(html.count("<script"), html.count("</script>"))
         self.assertEqual(html.count("<script"), 3)
 
+    def test_comment_opener_in_a_team_name_round_trips_and_keeps_the_scripts_intact(self):
+        data = {"league": "L", "teams": [{"name": "<!--<script>"}]}
+        html = self.render(data)
+        self.assertNotIn("<!--<script>", html)
+        start = html.index("window.__BOARD_DATA__ = ") + len("window.__BOARD_DATA__ = ")
+        end = html.index(";\n</script>", start)
+        self.assertEqual(json.loads(html[start:end]), data)
+        # the same page with the data removed: the script elements are the template's own, no more
+        outside = html[:start] + html[end:]
+        self.assertEqual(outside.count("<script"), 3)
+        self.assertEqual(outside.count("</script>"), 3)
+        self.assertEqual(html.count("</script>"), 3)
+
+    def test_league_name_cannot_break_out_of_the_title(self):
+        html = self.render({"league": "</title><b>x</b>"})
+        head = html[:html.index("</head>")]
+        self.assertNotIn("<b>", head)
+        self.assertEqual(head.count("</title>"), 1)
+        self.assertIn("<title>&lt;/title&gt;&lt;b&gt;x&lt;/b&gt; Trade Board</title>", head)
+
     def test_no_placeholder_is_left(self):
         html = self.render({"league": "L"})
         for ph in self.PLACEHOLDERS:
