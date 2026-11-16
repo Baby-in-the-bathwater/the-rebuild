@@ -66,6 +66,8 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 --cache-dir DIR      where pulls and crawled seasons are cached (default ./cache)
 --pdf                also render brief.pdf (needs Chrome, Chromium or Edge installed; the Action does this)
 --open               open the trade board when done
+--record DIR         after the run, save the gathered inputs to DIR (real league data: do not commit it to a public repo)
+--replay DIR         rebuild from a recording with no network; --league not needed, --team defaults to the recorded one, --out defaults to out/replay
 ```
 
 ## Benchmarks

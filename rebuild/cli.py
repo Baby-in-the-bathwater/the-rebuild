@@ -14,7 +14,7 @@ import webbrowser
 
 from . import benchmarks as bmod
 from . import pdf as pdfmod
-from . import board, engine, fetch
+from . import board, engine, fetch, inputs as inputs_mod
 from . import trade_history as thmod
 from .crawl import crawl_lineages, discover_pool, load_bundles, walk_lineage
 from .league import League, fmt_key
@@ -25,9 +25,11 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(prog="rebuild", description="Grade a Sleeper dynasty roster against what wins its format and draft the trades.")
-    ap.add_argument("--league", required=True, help="Sleeper league id (the number in the league URL)")
-    ap.add_argument("--team", required=True, help="team name, manager display name, username, or roster id")
-    ap.add_argument("--out", default=None, help="output folder (default out/<league id>)")
+    ap.add_argument("--league", help="Sleeper league id (the number in the league URL; required unless --replay)")
+    ap.add_argument("--team", help="team name, manager display name, username, or roster id (required unless --replay, which defaults to the recorded team)")
+    ap.add_argument("--out", default=None, help="output folder (default out/<league id>, or out/replay with --replay)")
+    ap.add_argument("--record", metavar="DIR", help="after the run, save the gathered inputs to DIR (holds the league's data)")
+    ap.add_argument("--replay", metavar="DIR", help="rebuild the report from inputs saved with --record; makes no network call")
     ap.add_argument("--cache-dir", default=os.path.join(HERE, "cache"), help="where Sleeper pulls and crawled seasons are cached")
     ap.add_argument("--benchmarks", default=None, help="path to a benchmark JSON to use instead of the shipped/crawled one")
     ap.add_argument("--pool", action="store_true", help="crawl a fresh benchmark pool for this format even if a shipped one matches")
@@ -39,7 +41,12 @@ def parse_args(argv=None):
     ap.add_argument("--refresh-values", action="store_true", help="re-download the values feed even if cached today")
     ap.add_argument("--pdf", action="store_true", help="also render brief.pdf (needs Chrome, Chromium or Edge installed)")
     ap.add_argument("--open", action="store_true", help="open the trade board in the browser when done")
-    return ap.parse_args(argv)
+    a = ap.parse_args(argv)
+    if a.record and a.replay:
+        ap.error("use --record or --replay, not both")
+    if not a.replay and not (a.league and a.team):
+        ap.error("--league and --team are required (unless --replay)")
+    return a
 
 
 def out_dir(a, league_id):
@@ -122,13 +129,27 @@ def gather(api, a, log):
             "snapshot_index": index, "snapshots": snapshots, "benchmark": bm, "benchmark_note": shipped_note}
 
 
-def main(argv=None):
+def main(argv=None, api=None):
     a = parse_args(argv)
     t0 = time.time()
     log = lambda s: print(f"[{time.time() - t0:5.0f}s] {s}", flush=True)  # noqa: E731
-    api = Sleeper(a.cache_dir)
-    r = engine.build_report(gather(api, a, log), a.team, log=log)
-    out = out_dir(a, r["league_id"])
+    stages = {} if a.replay else None
+    try:
+        if a.replay:
+            gathered, recorded_team = inputs_mod.load(a.replay)
+            team = a.team or recorded_team
+            log(f"replaying {a.replay}")
+            api_calls = 0
+        else:
+            api = api or Sleeper(a.cache_dir)
+            gathered, team = gather(api, a, log), a.team
+        r = engine.build_report(gathered, team, log=log, stages=stages)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    if not a.replay:
+        api_calls = api.calls
+    out = a.out or os.path.join(HERE, "out", "replay") if a.replay else out_dir(a, r["league_id"])
     os.makedirs(out, exist_ok=True)
 
     html = board.render(r["board_data"], os.path.join(out, "trade-board.html"))
@@ -141,14 +162,26 @@ def main(argv=None):
         log(f"pdf: {pdf_path}" if pdf_path else f"pdf skipped: {why}")
     with open(os.path.join(out, "board-data.json"), "w", encoding="utf-8") as f:
         json.dump(r["board_data"], f, indent=0)
-    summary = {**r["summary"], "api_calls": api.calls, "seconds": round(time.time() - t0)}
+    summary = {**r["summary"], "api_calls": api_calls, "seconds": round(time.time() - t0)}
     with open(os.path.join(out, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=1)
-    log(f"done: {api.calls} Sleeper calls")
+    if stages is not None:
+        os.makedirs(os.path.join(out, "stages"), exist_ok=True)
+        for name, value in stages.items():
+            with open(os.path.join(out, "stages", f"{name}.json"), "w", encoding="utf-8") as f:
+                json.dump(value, f, indent=1)
+    log(f"done: {api_calls} Sleeper calls")
     print(f"\n{summary['team']}: {summary['mode'].upper()} (contend in {summary['window']})")
     for reason in summary["reasons"]:
         print(f"  - {reason}")
     print(f"\n  brief        {md}" + (f"\n  brief pdf    {pdf_path}" if pdf_path else "") + f"\n  trade board  {html}\n  summary      {os.path.join(out, 'summary.json')}")
+    if a.record:
+        try:
+            inputs_mod.save(gathered, a.record, team)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        print(f"  recording    {a.record} (holds the league's data; keep it out of public repos)")
     if a.open:
         webbrowser.open("file://" + os.path.abspath(html))
     return 0

@@ -1,7 +1,10 @@
+import contextlib
 import datetime as dt
+import io
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -258,6 +261,91 @@ class GatherTest(unittest.TestCase):
             g, lines = self.gather(i, tmp, index=down)
         self.assertIsNone(g["snapshot_index"])
         self.assertIn("trade history skipped: rate limited", lines)
+
+
+class RecordReplayTest(unittest.TestCase):
+    FILES = ("summary.json", "board-data.json", "brief.md")
+
+    def run_cli(self, argv, api=None):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return cli.main(argv, api=api)
+
+    def read(self, folder):
+        out = {}
+        for f in self.FILES:
+            with open(os.path.join(folder, f), encoding="utf-8") as fh:
+                out[f] = "\n".join(l for l in fh.read().split("\n") if '"seconds"' not in l and '"api_calls"' not in l)
+        return out
+
+    def record(self, tmp, *extra):
+        i = synth_league.make_inputs()
+        argv = ["--league", i["chain"][0], "--team", "Team 3", "--cache-dir", os.path.join(tmp, "cache"),
+                "--out", os.path.join(tmp, "a"), "--record", os.path.join(tmp, "rec"), *extra]
+        with mock.patch.object(fetch, "values_csv", lambda *a, **k: i["values_csv"]), \
+                mock.patch.object(fetch, "snapshot_index", lambda *a, **k: i["snapshot_index"]), \
+                mock.patch.object(fetch, "snapshot_csv", lambda cache_dir, sha: i["snapshots"][sha]):
+            self.assertEqual(self.run_cli(argv, api=synth_league.FakeSleeper(i)), 0)
+
+    def replay(self, tmp, out, *extra):
+        return self.run_cli(["--replay", os.path.join(tmp, "rec"), "--out", os.path.join(tmp, out), *extra])
+
+    def test_record_then_replay_twice_is_identical(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            self.assertEqual(self.replay(tmp, "b"), 0)
+            self.assertEqual(self.replay(tmp, "c"), 0)
+            a, b, c = (self.read(os.path.join(tmp, x)) for x in "abc")
+            self.assertEqual(a, b)
+            self.assertEqual(b, c)
+
+    def test_replay_needs_no_network(self):
+        class NoApi:
+            def __getattr__(self, name):
+                raise AssertionError(f"replay called api.{name}")
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            with mock.patch.object(socket, "socket", side_effect=AssertionError("network")), \
+                    mock.patch.object(cli, "Sleeper", side_effect=AssertionError("Sleeper built")):
+                self.assertEqual(self.run_cli(["--replay", os.path.join(tmp, "rec"), "--out", os.path.join(tmp, "b")], api=NoApi()), 0)
+
+    def test_replay_writes_stages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            self.replay(tmp, "b")
+            self.assertEqual(sorted(os.listdir(os.path.join(tmp, "b", "stages"))),
+                             sorted(f"{n}.json" for n in ("league", "assets", "grade", "ledger", "deals", "three_team_deals", "trade_history")))
+
+    def test_no_history_survives_record_and_replay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp, "--no-history")
+            self.assertEqual(self.replay(tmp, "b"), 0)
+            self.assertEqual(self.read(os.path.join(tmp, "a")), self.read(os.path.join(tmp, "b")))
+            with open(os.path.join(tmp, "rec", "meta.json"), encoding="utf-8") as f:
+                self.assertIs(json.load(f)["options"]["history"], False)
+
+    def test_replay_unknown_team(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            with self.assertRaisesRegex(SystemExit, "No team matches 'Nobody'"):
+                self.replay(tmp, "b", "--team", "Nobody")
+
+    def test_replay_missing_folder_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            os.remove(os.path.join(tmp, "rec", "pull.json"))
+            self.assertEqual(self.replay(tmp, "b"), 2)
+
+    def test_record_and_replay_together_is_refused(self):
+        with self.assertRaises(SystemExit) as cm:
+            self.run_cli(["--record", "x", "--replay", "y"])
+        self.assertEqual(cm.exception.code, 2)
+
+    def test_unsafe_league_id_to_record_exits_2(self):
+        i = synth_league.make_inputs()
+        i["history"]["../x"] = {}
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cli, "gather", return_value=i):
+            self.assertEqual(self.run_cli(["--league", "1", "--team", "Team 3", "--out", os.path.join(tmp, "a"),
+                                           "--record", os.path.join(tmp, "rec")], api=mock.Mock(calls=0)), 2)
 
 
 if __name__ == "__main__":
