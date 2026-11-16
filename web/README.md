@@ -1,6 +1,6 @@
 # The Rebuild: web
 
-A static TypeScript site. A Web Worker will run the Python engine in the browser; for now the worker only answers a ping. It deploys as Cloudflare Workers static assets: there is no server code and no Worker script.
+A static TypeScript site. A Web Worker will run the Python engine in the browser (`src/engine/python.ts` loads it under Pyodide); for now the worker only answers a ping. It deploys as Cloudflare Workers static assets: there is no server code and no Worker script.
 
 ## Prerequisites
 
@@ -11,8 +11,9 @@ Install with `pnpm install --frozen-lockfile`. The esbuild and Wrangler's worker
 
 ## Commands
 
-- `pnpm dev`: start the Vite dev server.
-- `pnpm build`: type-check, then build the site into `dist/`.
+- `pnpm prepare-assets`: build `public/engine/engine.zip` (needs `python3` on PATH) and copy the Pyodide runtime into `public/pyodide/<version>/`. Both are generated and git-ignored. Run it once before `pnpm dev`, and again after changing `rebuild/` or the `pyodide` version.
+- `pnpm dev`: start the Vite dev server (run `pnpm prepare-assets` first).
+- `pnpm build`: run `prepare-assets`, type-check, then build the site into `dist/`.
 - `pnpm typecheck`: run `tsc --noEmit`.
 - `pnpm test`: run the Vitest suite once.
 - `pnpm preview`: serve `dist/` locally with `wrangler dev` (run `pnpm build` first).
@@ -22,6 +23,12 @@ Install with `pnpm install --frozen-lockfile`. The esbuild and Wrangler's worker
 - `src/engine/`: the worker protocol, the worker itself and the client that talks to it. No DOM code.
 - `src/ui/`: the page code that runs on the main thread.
 - `src/data/`: TypeScript that fetches data (from Sleeper and other sources) and caches it in the browser. Static files the site fetches at runtime go in `public/`, because Vite does not ship files under `src/` unless they are imported.
+
+## The Python runtime
+
+Decision: Pyodide is self-hosted. `pyodide` is pinned to an exact version in `package.json`, `scripts/copy_pyodide.mjs` copies its runtime files into `public/pyodide/<version>/`, and the tests load the same package. The version served is therefore the version tested, and the site depends on no third-party host at run time. The version is in the path, so `public/_headers` marks `/pyodide/*` as cacheable for a year (`immutable`); `public/_headers` ends up in `dist/` for Cloudflare. The engine bundle at `/engine/engine.zip` is not versioned in its path and is not given that header.
+
+Only the Python standard library is loaded: the engine never imports numpy or requests, and nothing calls `loadPackage`.
 
 ## Deploying
 
