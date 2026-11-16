@@ -19,8 +19,8 @@ A fifth path is the one this grew out of: run the CLI, then let a Claude session
 league id + team
    |
    v
-League.pull  -> settings, rosters, users, traded picks, weekly matchups, trades, bracket
-Values.load  -> DynastyProcess CSV (value_2qb if Superflex else value_1qb)
+fetch.league_pull -> settings, rosters, users, traded picks, weekly matchups, trades, bracket
+Values.from_csv -> DynastyProcess CSV (value_2qb if Superflex else value_1qb)
 walk_lineage -> previous_league_id chain, one bundle per season (cached forever once complete)
 benchmark    -> shipped JSON for the format family, or discover_pool + crawl_lineages + build
 grade        -> team_rows (own league) -> z within league -> percentile on the pool -> the call
