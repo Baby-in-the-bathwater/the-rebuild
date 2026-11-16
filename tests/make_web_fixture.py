@@ -3,8 +3,10 @@
     python tests/make_web_fixture.py            rewrite the folder
     python tests/make_web_fixture.py --check    exit 1 if the committed folder differs from a fresh build
 
-`http.json` is every request a browser report makes (url -> parsed JSON, or text for CSV); a league that does not exist is
-absent. `inputs.json` is what `cli.gather` builds from the same data; `expected/` is `engine.build_report` on it."""
+`http.json` is every request a browser report makes (url -> the exact response text); a league that does not exist is
+absent. `players.json` and `snapshot_index.json` are the exact text of the player table and the values feed's commit
+index. `responses` gives the same texts keyed as `rebuild.web_api`'s `lookup` asks for them. `inputs.json` is what
+`cli.gather` builds from the same data; `expected/` is `engine.build_report` on it."""
 import argparse
 import json
 import os
@@ -26,8 +28,8 @@ FETCHED = "2026-11-16"
 SLEEPER = "https://api.sleeper.app/v1"
 
 
-def _dump(obj):
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
+def _dump(obj, sort_keys=True):
+    return json.dumps(obj, sort_keys=sort_keys, separators=(",", ":"), ensure_ascii=False) + "\n"
 
 
 def gather(source):
@@ -46,29 +48,65 @@ def gather(source):
     return inputs
 
 
-def recorded_http(source, inputs):
-    """Every url a browser report asks for, with the body the fake Sleeper gives. All of weeks 1..18 for matchups and
-    transactions, so the fixture does not say which weeks get asked for."""
+def responses(source):
+    """{lookup key: exact response text} for every request a browser report makes, with the body the fake Sleeper
+    gives (JSON as Python writes it, key order kept). All of weeks 1..18 for matchups and transactions, so the
+    fixture does not say which weeks get asked for."""
     api = synth_league.FakeSleeper(source)
-    http = {f"{SLEEPER}/state/nfl": source["state"]}
-    for lid in inputs["chain"]:
-        base = f"{SLEEPER}/league/{lid}"
-        http[base] = api.league(lid)
-        http[f"{base}/rosters"] = api.rosters(lid)
-        http[f"{base}/users"] = api.users(lid)
-        http[f"{base}/traded_picks"] = api.traded_picks(lid)
+    out = {"state/nfl": json.dumps(api.state())}
+    for lid in source["chain"]:
+        base = f"league/{lid}"
+        out[base] = json.dumps(api.league(lid))
+        out[f"{base}/rosters"] = json.dumps(api.rosters(lid))
+        out[f"{base}/users"] = json.dumps(api.users(lid))
+        out[f"{base}/traded_picks"] = json.dumps(api.traded_picks(lid))
         for wk in range(1, 19):
-            http[f"{base}/matchups/{wk}"] = api.matchups(lid, wk)
-            http[f"{base}/transactions/{wk}"] = api.transactions(lid, wk)
-        http[f"{base}/winners_bracket"] = api.winners_bracket(lid)
+            out[f"{base}/matchups/{wk}"] = json.dumps(api.matchups(lid, wk))
+            out[f"{base}/transactions/{wk}"] = json.dumps(api.transactions(lid, wk))
+        out[f"{base}/winners_bracket"] = json.dumps(api.winners_bracket(lid))
         drafts = api.drafts(lid)
-        http[f"{base}/drafts"] = drafts
+        out[f"{base}/drafts"] = json.dumps(drafts)
         for d in drafts:
-            http[f"{SLEEPER}/draft/{d['draft_id']}/picks"] = api.draft_picks(d["draft_id"])
-    http[fetch.VALUES_URL] = source["values_csv"]
-    for sha in inputs["snapshots"]:
-        http[fetch.RAW_URL.format(sha=sha)] = inputs["snapshots"][sha]
-    return http
+            out[f"draft/{d['draft_id']}/picks"] = json.dumps(api.draft_picks(d["draft_id"]))
+    out["players"] = json.dumps(api.players())
+    out["values_csv"] = source["values_csv"]
+    out["snapshot_index"] = json.dumps(source["snapshot_index"])
+    for sha, text in source["snapshots"].items():
+        out[f"snapshot/{sha}"] = text
+    return out
+
+
+OWN_FILES = {"players": "players.json", "snapshot_index": "snapshot_index.json"}   # keys kept out of http.json
+
+
+def url_of(key):
+    if key == "values_csv":
+        return fetch.VALUES_URL
+    if key.startswith("snapshot/"):
+        return fetch.RAW_URL.format(sha=key[len("snapshot/"):])
+    return f"{SLEEPER}/{key}"
+
+
+def key_of(url):
+    """The lookup key for a url in http.json."""
+    if url == fetch.VALUES_URL:
+        return "values_csv"
+    prefix, suffix = fetch.RAW_URL.split("{sha}")
+    if url.startswith(prefix) and url.endswith(suffix):
+        return "snapshot/" + url[len(prefix):-len(suffix)]
+    if url.startswith(SLEEPER + "/"):
+        return url[len(SLEEPER) + 1:]
+    raise ValueError(f"not a url a browser report asks for: {url}")
+
+
+def read_responses(folder):
+    """{lookup key: text} from a fixture folder's http.json, players.json and snapshot_index.json."""
+    with open(os.path.join(folder, "http.json"), encoding="utf-8") as f:
+        out = {key_of(url): text for url, text in json.load(f).items()}
+    for key, name in OWN_FILES.items():
+        with open(os.path.join(folder, name), encoding="utf-8", newline="") as f:
+            out[key] = f.read()
+    return out
 
 
 def files():
@@ -76,12 +114,12 @@ def files():
     source = synth_league.make_inputs()
     inputs = gather(source)
     report = engine.build_report(inputs, TEAM, log=lambda s: None)
+    texts = responses(source)
     return {
-        "http.json": _dump(recorded_http(source, inputs)),
-        "players.json": _dump(inputs["players"]),
-        "snapshot_index.json": _dump(source["snapshot_index"]),
+        "http.json": _dump({url_of(k): t for k, t in texts.items() if k not in OWN_FILES}),
+        **{name: texts[key] for key, name in OWN_FILES.items()},
         "meta.json": _dump({"league_id": inputs["chain"][0], "team": TEAM, "run_at": RUN_AT}),
-        "inputs.json": _dump(inputs),
+        "inputs.json": _dump(inputs, sort_keys=False),
         "expected/summary.json": _dump(report["summary"]),
         "expected/board-data.json": _dump(report["board_data"]),
         "expected/brief.md": report["brief"],

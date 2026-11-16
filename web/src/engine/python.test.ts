@@ -1,23 +1,19 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { loadEngine, PYODIDE_VERSION, type Engine } from "./python";
+import { fixtureLookup, fixtureText, lookup, meta, responses, webRoot } from "../testing/fixture";
+import { loadEngine, PYODIDE_VERSION, type BuildResult, type Engine } from "./python";
 
-const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const fixture = (name: string) => JSON.parse(readFileSync(join(webRoot, "fixtures", "synth", name), "utf8"));
-
-const fixtureInputs = fixture("inputs.json");
-const meta = fixture("meta.json");
+const expected = (name: string) => fixtureText(join("expected", name));
+const snapshotKeys = [...responses.keys()].filter((k) => k.startsWith("snapshot/"));
 
 let tmp: string;
 let engine: Engine;
-let lines: string[] = [];
-let inputs: typeof fixtureInputs;
-let result: ReturnType<Engine["build"]>;
-const PARTIAL_KEYS = ["state", "players", "pull", "chain", "history", "snapshot_index"];
+let result: BuildResult;
+const lines: string[] = [];
+const asked: string[] = [];
 
 beforeAll(async () => {
   tmp = mkdtempSync(join(tmpdir(), "engine-"));
@@ -27,11 +23,11 @@ beforeAll(async () => {
     indexURL: join(webRoot, "node_modules", "pyodide") + "/",
     bundle: readFileSync(zip),
   });
-  // As the page does: the benchmark comes from plan(), which keeps the shipped file's key order
-  // (the fixture's inputs.json has sorted keys, which would reorder the brief's tables).
-  const plan = engine.plan(Object.fromEntries(PARTIAL_KEYS.map((k) => [k, fixtureInputs[k]])));
-  inputs = { ...fixtureInputs, benchmark: plan.benchmark };
-  result = engine.build(inputs, meta.team, (line) => lines.push(line));
+  const counting = (key: string) => {
+    asked.push(key);
+    return lookup(key);
+  };
+  result = engine.build(counting, meta.league_id, meta.team, meta.run_at, (line) => lines.push(line));
 }, 120_000);
 
 afterAll(() => {
@@ -43,38 +39,56 @@ describe("the engine under Pyodide", () => {
     expect(PYODIDE_VERSION).toBe("314.0.8");
   });
 
-  it("builds the same report as the Python tests expect", () => {
+  it("builds exactly the report the CLI builds", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.report.summary).toEqual(fixture("expected/summary.json"));
-    expect(result.report.board_data).toEqual(fixture("expected/board-data.json"));
+    expect(result.report.summary).toEqual(JSON.parse(expected("summary.json")));
+    expect(result.report.board_data).toEqual(JSON.parse(expected("board-data.json")));
+    expect(result.report.brief).toBe(expected("brief.md"));
     expect(lines.length).toBeGreaterThan(0);
   });
 
-  // KNOWN DIVERGENCE: JSON.stringify writes the float 4.0 as 4, so Python sees an int and the brief
-  // says "4-pt pass TD" where the CLI says "4.0-pt". Every line but that one matches. When the
-  // divergence is fixed this `it.fails` goes red; delete the looser test below and drop `.fails`.
-  const expectedBrief = () => readFileSync(join(webRoot, "fixtures", "synth", "expected", "brief.md"), "utf8");
-  it.fails("builds exactly the fixture's brief", () => {
-    expect(result.ok && result.report.brief).toBe(expectedBrief());
-  });
-  it("builds the fixture's brief apart from how a whole-number point value is written", () => {
-    expect(result.ok && result.report.brief.replace("4-pt pass TD", "4.0-pt pass TD")).toBe(expectedBrief());
+  it("asks for each response once", () => {
+    expect(asked.length).toBeGreaterThan(0);
+    expect(new Set(asked).size).toBe(asked.length);
   });
 
-  it("agrees with the fixture on the current week and the plan", () => {
-    expect(engine.currentWeek(fixtureInputs.pull.league, fixtureInputs.state)).toBe(fixtureInputs.state.week);
-    const plan = engine.plan(Object.fromEntries(PARTIAL_KEYS.map((k) => [k, fixtureInputs[k]])));
-    expect(plan.benchmark).toEqual(fixtureInputs.benchmark);
-    expect(plan.benchmark_note).toBe(fixtureInputs.benchmark_note);
-    expect(plan.snapshot_index).toEqual(fixtureInputs.snapshot_index);
-    expect(plan.teams.length).toBeGreaterThan(0);
+  it("plans the league, its chain and the snapshots to fetch", () => {
+    const plan = engine.plan(lookup, meta.league_id);
+    expect(plan.found).toBe(true);
+    if (!plan.found) return;
+    const inputs = JSON.parse(fixtureText("inputs.json"));
+    expect(plan.league.name).toBe(inputs.pull.league.name);
+    expect(plan.league.week).toBe(inputs.state.week);
+    expect(plan.chain).toEqual(inputs.chain);
+    expect(plan.snapshot_shas.length).toBeGreaterThan(0);
+    expect([...plan.snapshot_shas].sort()).toEqual(Object.keys(inputs.snapshots).sort());
+    expect(plan.teams.map((t) => t.name)).toContain(meta.team);
+    // the plan needs the index, not the CSVs it names
+    const withoutCsvs = engine.plan(fixtureLookup(snapshotKeys), meta.league_id);
+    expect(withoutCsvs.found && withoutCsvs.snapshot_shas).toEqual(plan.snapshot_shas);
+  });
+
+  it("says when the league does not exist", () => {
+    expect(engine.plan(lookup, "L404")).toEqual({ found: false });
+    const bad = engine.build(lookup, "L404", meta.team, meta.run_at, () => {});
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.kind).toBe("league");
   });
 
   it("names the problem for an unknown team", () => {
-    const bad = engine.build(inputs, "No Such Team", () => {});
+    const bad = engine.build(lookup, meta.league_id, "No Such Team", meta.run_at, () => {});
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.kind).toBe("team");
+  });
+
+  it("builds without trade history when the snapshot index is missing", () => {
+    const skipped: string[] = [];
+    const out = engine.build(fixtureLookup(["snapshot_index"]), meta.league_id, meta.team, meta.run_at, (l) => skipped.push(l));
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.report.board_data.trade_history).toBeNull();
+    expect(skipped).toContain("trade history skipped: no snapshot index");
   });
 
   it("never loads numpy or requests", () => {
