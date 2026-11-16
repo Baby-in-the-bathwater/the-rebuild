@@ -1,7 +1,7 @@
 name: Deploy
 
 # Deploys the static site in web/ to Cloudflare Workers.
-#   - A push to main that touches the site or the engine deploys to staging.
+#   - A push to main that touches the site, the engine or the benchmarks it bundles deploys to staging.
 #   - A daily schedule deploys staging too, to refresh the player file and the snapshot index (web/scripts/build_data.py).
 #   - "Run workflow" deploys to the environment you pick.
 # The account comes from two secrets, CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, set on the
@@ -14,6 +14,7 @@ on:
     paths:
       - "web/**"
       - "rebuild/**"
+      - "benchmarks/**"
       - ".github/workflows/deploy.yml"
   schedule:
     - cron: "17 6 * * *"
