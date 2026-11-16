@@ -3,6 +3,7 @@ import os
 import re
 import tempfile
 import unittest
+from html.parser import HTMLParser
 from types import SimpleNamespace
 
 from rebuild import board, grade, trades
@@ -50,6 +51,25 @@ class RenderTest(unittest.TestCase):
         self.assertNotIn("</script><img", html)
         self.assertEqual(html.count("<script"), html.count("</script>"))
         self.assertEqual(html.count("<script"), 3)
+
+    def test_markup_in_names_reaches_the_page_only_as_script_data(self):
+        """A team, league or owner name with markup must not become an element in the file the CLI writes. The
+        names travel only inside the data script (where they are text); board.js escapes them when it draws."""
+        hostile = '<img src=x onerror="window.__xss=1"> a & b <i>c</i>'
+        html = self.render({"league": hostile, "teams": [{"name": hostile, "owner": hostile}]})
+        tags = []
+
+        class Tags(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                tags.append(tag)
+
+        Tags().feed(html)
+        self.assertNotIn("img", tags)
+        self.assertEqual(tags.count("i"), board.sources()["body"].count("<i "))   # the legend's swatches only
+        outside = re.sub(r"<script\b.*?</script>", "", html, flags=re.S)
+        self.assertNotIn("<img src=x", outside)
+        self.assertIn("&lt;img src=x", outside)   # the title, escaped
+        self.assertIn("esc(team.name)", board.sources()["board_js"])
 
     def test_comment_opener_in_a_team_name_round_trips_and_keeps_the_scripts_intact(self):
         data = {"league": "L", "teams": [{"name": "<!--<script>"}]}
