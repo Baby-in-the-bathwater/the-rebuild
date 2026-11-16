@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 from rebuild import engine, web_api
 from rebuild.league import League
@@ -103,6 +104,13 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((out["ok"], out["kind"]), (False, "inputs"))
         out = json.loads(web_api.build(json.dumps({**i, "values_csv": 5}), "Team 3"))
         self.assertEqual((out["ok"], out["kind"]), (False, "engine"))
+
+    def test_build_reports_an_unserialisable_report_as_an_engine_error(self):
+        i = synth_league.make_inputs()
+        for bad in ({"x": {1, 2}}, {"x": float("nan")}):
+            with mock.patch.object(engine, "build_report", return_value=bad):
+                out = json.loads(web_api.build(json.dumps(i), "Team 3"))
+            self.assertEqual((out["ok"], out["kind"]), (False, "engine"))
 
 
 class BrowserEnvironmentTest(unittest.TestCase):

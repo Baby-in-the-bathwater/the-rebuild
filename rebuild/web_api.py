@@ -46,4 +46,7 @@ def build(inputs_json: str, team: str, log=None) -> str:
         return json.dumps({"ok": False, "kind": "inputs", "message": str(e)})
     except Exception as e:  # noqa: BLE001 - the page shows whatever went wrong
         return json.dumps({"ok": False, "kind": "engine", "message": f"{type(e).__name__}: {e}"})
-    return json.dumps({"ok": True, "report": report})
+    try:
+        return json.dumps({"ok": True, "report": report}, allow_nan=False)
+    except (TypeError, ValueError) as e:  # a report the browser could not read (NaN, a set)
+        return json.dumps({"ok": False, "kind": "engine", "message": f"{type(e).__name__}: {e}"})
