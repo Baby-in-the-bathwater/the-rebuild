@@ -17,6 +17,7 @@ export async function fetchLeagueTexts(
   const leagueText = await api.text(`league/${id}`);
   if (leagueText === null) return null;
   const league = JSON.parse(leagueText);
+  if (league === null) return null; // a body of literal null: no such league, as Python reads it
   const texts: Texts = { [`league/${id}`]: leagueText };
   const get = async (path: string) => {
     const text = await api.text(path);
@@ -27,7 +28,7 @@ export async function fetchLeagueTexts(
   const picks = async () => {
     const draftsText = await get(`${base}/drafts`);
     if (draftsText === null) return;
-    const drafts: Array<{ draft_id?: string }> = JSON.parse(draftsText);
+    const drafts: Array<{ draft_id?: string }> = JSON.parse(draftsText) ?? []; // literal null: no drafts
     await Promise.all(drafts.filter((d) => d.draft_id).map((d) => get(`draft/${d.draft_id}/picks`)));
   };
   await Promise.all([
@@ -57,15 +58,18 @@ function wellFormed(entry: unknown, id: string): entry is SeasonEntry {
   }
 }
 
+/** A past season that is complete is kept for good. The league asked for is always checked against the 30-minute,
+ * same-week and `fresh` rule, whatever its status: a finished league still changes until it is renewed. */
 function reusable(
   entry: unknown,
   id: string,
+  requested: boolean,
   week: number | null,
   now: Date,
   fresh: boolean | undefined,
 ): entry is SeasonEntry {
   if (!wellFormed(entry, id)) return false;
-  if (entry.status === "complete") return true;
+  if (!requested && entry.status === "complete") return true;
   const age = now.getTime() - Date.parse(entry.stored);
   return !fresh && age >= 0 && age < SEASON_TTL_MS && entry.week === week;
 }
@@ -90,7 +94,7 @@ export async function collectLeague(
       entry = undefined;
     }
     let leagueText: string;
-    if (reusable(entry, id, state.week, now, opts.fresh)) {
+    if (reusable(entry, id, id === leagueId, state.week, now, opts.fresh)) {
       Object.assign(texts, entry.texts);
       leagueText = entry.texts[`league/${id}`] ?? "{}";
     } else {

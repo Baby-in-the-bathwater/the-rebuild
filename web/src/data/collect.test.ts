@@ -130,6 +130,65 @@ describe("collectLeague", () => {
       expect(Object.keys(got.texts)).toContain("league/A");
     });
   });
+  describe("a finished league", () => {
+    const SL = "https://api.sleeper.app/v1/";
+    const pages = {
+      [`${SL}league/A`]: JSON.stringify({ league_id: "A", previous_league_id: "B", status: "complete", season: "2025" }),
+      [`${SL}league/B`]: JSON.stringify({ league_id: "B", previous_league_id: null, status: "complete", season: "2024" }),
+    };
+    const seeded = async () => {
+      const store = memoryStore();
+      const f = countingFetch(pages);
+      const api = createSleeper({ fetch: f.fetch });
+      await collectLeague(api, store, "A", state, NOW);
+      f.reset();
+      return { store, f, api };
+    };
+    const fetched = (f: ReturnType<typeof countingFetch>, id: string) => f.calls.has(`${SL}league/${id}`);
+
+    it("is refetched when asked for fresh, and its past season is not", async () => {
+      const { store, f, api } = await seeded();
+      const got = await collectLeague(api, store, "A", state, minutes(1), { fresh: true });
+      expect(got.chain).toEqual(["A", "B"]);
+      expect(fetched(f, "A")).toBe(true);
+      expect(fetched(f, "B")).toBe(false);
+    });
+    it("is refetched once its entry is older than 30 minutes, and its past season is not", async () => {
+      const { store, f, api } = await seeded();
+      await collectLeague(api, store, "A", state, minutes(31));
+      expect(fetched(f, "A")).toBe(true);
+      expect(fetched(f, "B")).toBe(false);
+    });
+    it("is reused within 30 minutes of the same week", async () => {
+      const { store, f, api } = await seeded();
+      await collectLeague(api, store, "A", state, minutes(29));
+      expect(f.state.total).toBe(0);
+    });
+    it("keeps a finished past season for good, even when fresh and days later", async () => {
+      const { store, f, api } = await seeded();
+      await collectLeague(api, store, "A", { week: 9, season: "2026" }, minutes(60 * 24 * 7), { fresh: true });
+      expect(fetched(f, "A")).toBe(true);
+      expect(fetched(f, "B")).toBe(false);
+    });
+  });
+  describe("a body of literal null", () => {
+    const SL = "https://api.sleeper.app/v1/";
+    it("reads as no league", async () => {
+      const f = countingFetch({ [`${SL}league/A`]: "null" });
+      const got = await collectLeague(createSleeper({ fetch: f.fetch }), memoryStore(), "A", state, NOW);
+      expect(got).toEqual({ found: false, chain: [], texts: {} });
+    });
+    it("reads as no drafts", async () => {
+      const f = countingFetch({
+        [`${SL}league/A`]: JSON.stringify({ league_id: "A", status: "in_season", season: "2026" }),
+        [`${SL}league/A/drafts`]: "null",
+      });
+      const got = await collectLeague(createSleeper({ fetch: f.fetch }), memoryStore(), "A", state, NOW);
+      expect(got.chain).toEqual(["A"]);
+      expect(got.texts["league/A/drafts"]).toBe("null");
+      expect([...f.calls.keys()].some((u) => u.includes("/draft/"))).toBe(false);
+    });
+  });
   it("stores nothing for a season whose endpoint fails, and fetches it again next time", async () => {
     const store = memoryStore();
     const pages = Object.fromEntries([...responses.keys()].filter((k) => k.startsWith("league/") || k.startsWith("draft/")).map((k) => [`https://api.sleeper.app/v1/${k}`, responses.get(k)!]));
