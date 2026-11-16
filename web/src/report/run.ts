@@ -29,6 +29,15 @@ export type Deps = {
 export type Stored = { report: Report; built: string /* ISO */ };
 export const REPORT_TTL_MS = 30 * 60 * 1000;
 
+/** A report, and what the page should tell the user about this run (empty when nothing went missing). */
+export type RunResult = Report & { notices: string[] };
+export const TRADE_HISTORY_NOTICE = "Trade history could not be loaded this time. Refresh data to try again.";
+
+/** Snapshot CSVs in flight at once, and the wait before the one retry of a snapshot that failed. */
+export const SNAPSHOT_CONCURRENCY = 6;
+export const SNAPSHOT_RETRY_MS = 1000;
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 const teamKey = (leagueId: string, team: string) => `team:${leagueId}:${team.trim().toLowerCase()}`;
 const reportKey = (leagueId: string, rosterId: number) => `report:${leagueId}:${rosterId}`;
 const leagueMissing = (id: string) => new ReportError("league", `League ${id} was not found on Sleeper.`);
@@ -68,12 +77,13 @@ export async function runReport(
   req: { leagueId: string; team: string; fresh?: boolean },
   deps: Deps,
   onProgress: (line: string) => void,
-): Promise<Report> {
+): Promise<RunResult> {
   const store = forgiving(deps.store);
   const now = deps.now();
   if (!req.fresh) {
+    // a report that lost its trade history is never stored, so a cached one has nothing to add
     const hit = await cached(store, req.leagueId, req.team, now);
-    if (hit) return hit;
+    if (hit) return { ...hit, notices: [] };
   }
   try {
     return await build(req, deps, store, now, onProgress);
@@ -90,7 +100,7 @@ async function build(
   store: Store,
   now: Date,
   onProgress: (line: string) => void,
-): Promise<Report> {
+): Promise<RunResult> {
   const { leagueId } = req;
   const dataBase = deps.dataBase ?? "/data/";
   const api = createSleeper({ fetch: deps.fetch, sleep: deps.sleep });
@@ -137,12 +147,10 @@ async function build(
   if (!plan.found) throw leagueMissing(leagueId);
   const { name, season: planSeason, status, week: planWeek } = plan.league;
   onProgress(`league: ${name} | season ${planSeason} ${status} | week ${planWeek}`);
-  try {
-    const csvs = await Promise.all(plan.snapshot_shas.map((sha) => snapshotCsv(deps.fetch, store, sha)));
-    plan.snapshot_shas.forEach((sha, i) => texts.set(`snapshot/${sha}`, csvs[i]!));
-  } catch {
-    // add none of them: Python then skips trade history and says why
-  }
+  const csvs = await snapshotCsvs(plan.snapshot_shas, (sha) => snapshotCsv(deps.fetch, store, sha), deps.sleep ?? defaultSleep);
+  // all or none: with none, Python skips trade history and says why
+  if (csvs) plan.snapshot_shas.forEach((sha, i) => texts.set(`snapshot/${sha}`, csvs[i]!));
+  const historyLost = index === undefined || csvs === null;
 
   const runAt = deps.now().toISOString();
   const result = engine.build(lookup, leagueId, req.team, runAt, onProgress);
@@ -152,8 +160,41 @@ async function build(
     throw engineFailed(result.message);
   }
   const { report } = result;
-  const stored: Stored = { report, built: runAt };
-  await store.set(reportKey(leagueId, report.roster_id), stored);
+  // A report missing its trade history only because a fetch failed is not kept: the next run tries again.
+  if (!historyLost) {
+    const stored: Stored = { report, built: runAt };
+    await store.set(reportKey(leagueId, report.roster_id), stored);
+  }
   await store.set(teamKey(leagueId, req.team), report.roster_id);
-  return report;
+  return { ...report, notices: historyLost ? [TRADE_HISTORY_NOTICE] : [] };
+}
+
+/** Every snapshot's text in order, or null when one still fails after one retry. At most SNAPSHOT_CONCURRENCY are in
+ * flight; after a failure no new ones start, since none of them would be used. */
+async function snapshotCsvs(
+  shas: string[],
+  fetchOne: (sha: string) => Promise<string>,
+  sleep: (ms: number) => Promise<void>,
+): Promise<string[] | null> {
+  const texts: string[] = [];
+  let next = 0;
+  let failed = false;
+  const lane = async () => {
+    while (!failed && next < shas.length) {
+      const i = next++;
+      const sha = shas[i]!;
+      try {
+        texts[i] = await fetchOne(sha);
+      } catch {
+        await sleep(SNAPSHOT_RETRY_MS);
+        try {
+          texts[i] = await fetchOne(sha);
+        } catch {
+          failed = true;
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SNAPSHOT_CONCURRENCY, shas.length) }, lane));
+  return failed ? null : texts;
 }

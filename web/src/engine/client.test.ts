@@ -1,8 +1,7 @@
 import { expect, test } from "vitest";
 import { createEngine, EngineError, type WorkerLike } from "./client";
 import { createHandler, type EngineRequest, type Runner } from "./protocol";
-import type { Report } from "./python";
-import { ReportError } from "../report/run";
+import { ReportError, type RunResult } from "../report/run";
 
 type Listener = (e: any) => void;
 
@@ -11,7 +10,7 @@ interface FakeWorker extends WorkerLike {
   flush(order?: "reverse"): void;
 }
 
-const report = (team: string): Report => ({ league_id: "L1", roster_id: 3, summary: { team }, board_data: {}, brief: team });
+const report = (team: string): RunResult => ({ league_id: "L1", roster_id: 3, summary: { team }, board_data: {}, brief: team, notices: [] });
 
 // A runner that reports "<team>: start", then waits until release(team) before "<team>: done" and its report.
 // Team "bad" fails with a team error.

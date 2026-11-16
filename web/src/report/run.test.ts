@@ -7,7 +7,7 @@ import { memoryStore, type Store } from "../data/store";
 import { snapshotUrl } from "../data/feeds";
 import { loadEngine, type Engine, type Report } from "../engine/python";
 import { fixtureText, http, meta, webRoot } from "../testing/fixture";
-import { ReportError, runReport, type Deps } from "./run";
+import { ReportError, runReport, SNAPSHOT_CONCURRENCY, TRADE_HISTORY_NOTICE, type Deps } from "./run";
 
 const expected = (name: string) => fixtureText(join("expected", name));
 const NOW = new Date(meta.run_at);
@@ -36,24 +36,32 @@ afterAll(() => {
   if (tmp) rmSync(tmp, { recursive: true, force: true });
 });
 
-/** A fetch over `served` that counts requests per url; urls in `failing` answer 500, unknown urls 404. */
-function fakeFetch(failing: Iterable<string> = [], served: Record<string, string> = pages) {
+/** A fetch over `served` that counts requests per url; urls in `failing` answer 500 (those in `failingOnce` only the
+ * first time), unknown urls 404. `snapshots` tracks how many snapshot CSV requests were in flight at once. */
+function fakeFetch(failing: Iterable<string> = [], served: Record<string, string> = pages, failingOnce: Iterable<string> = []) {
   const broken = new Set(failing);
+  const brokenOnce = new Set(failingOnce);
   const calls = new Map<string, number>();
+  const snapshots = { inFlight: 0, maxInFlight: 0 };
   const fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
     calls.set(url, (calls.get(url) ?? 0) + 1);
+    const snapshot = /dynastyprocess\/data\/(?!master)/.test(url);
+    if (snapshot) snapshots.maxInFlight = Math.max(snapshots.maxInFlight, ++snapshots.inFlight);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    if (broken.has(url)) return new Response("server error", { status: 500 });
+    if (snapshot) snapshots.inFlight--;
+    if (broken.has(url) || (brokenOnce.has(url) && calls.get(url) === 1)) return new Response("server error", { status: 500 });
     const body = served[url];
     return body === undefined ? new Response("not found", { status: 404 }) : new Response(body, { status: 200 });
   }) as typeof globalThis.fetch;
   const total = () => [...calls.values()].reduce((a, b) => a + b, 0);
-  return { fetch, calls, total, reset: () => calls.clear() };
+  return { fetch, calls, total, snapshots, reset: () => calls.clear() };
 }
 
-function setup(opts: { failing?: string[]; store?: Store; now?: () => Date; served?: Record<string, string> } = {}) {
-  const f = fakeFetch(opts.failing, opts.served);
+function setup(
+  opts: { failing?: string[]; failingOnce?: string[]; store?: Store; now?: () => Date; served?: Record<string, string> } = {},
+) {
+  const f = fakeFetch(opts.failing, opts.served, opts.failingOnce);
   const engineCalls = { n: 0 };
   const deps: Deps = {
     fetch: f.fetch,
@@ -171,15 +179,66 @@ describe("runReport", () => {
     ["the snapshot index", [INDEX]],
     ["a snapshot CSV", snapshotUrls],
   ] as const) {
-    it(`builds without trade history when ${what} cannot be fetched`, async () => {
+    it(`builds without trade history when ${what} cannot be fetched, says so, and does not cache that report`, async () => {
       expect(failing.length).toBeGreaterThan(0);
-      const { deps } = setup({ failing: [...failing] });
+      const { f, deps, engineCalls } = setup({ failing: [...failing] });
       const { lines, done } = run(deps);
       const report = await done;
       expect(report.board_data.trade_history).toBeNull();
+      expect(report.notices).toEqual([TRADE_HISTORY_NOTICE]);
       expect(lines.some((l) => l.startsWith("trade history skipped"))).toBe(true);
+      for (const url of failing) expect(f.calls.get(url)).toBeLessThanOrEqual(2);
+      // nothing cached: the next run within 30 minutes builds again
+      const again = await run(deps).done;
+      expect(engineCalls.n).toBe(2);
+      expect(again.notices).toEqual([TRADE_HISTORY_NOTICE]);
     });
   }
+
+  it("retries a snapshot that fails once, and keeps the trade history", async () => {
+    const flaky = snapshotUrls[0]!;
+    const { f, deps, engineCalls } = setup({ failingOnce: [flaky] });
+    const report = await run(deps).done;
+    expect(f.calls.get(flaky)).toBe(2);
+    expect(report.board_data.trade_history).not.toBeNull();
+    expect(report.notices).toEqual([]);
+    expectFixtureReport(report);
+    await run(deps).done;
+    expect(engineCalls.n).toBe(1); // cached
+  });
+
+  it("answers a cached report with no notices", async () => {
+    let now = NOW;
+    const { deps } = setup({ now: () => now });
+    await run(deps).done;
+    now = minutes(1);
+    expect((await run(deps).done).notices).toEqual([]);
+  });
+
+  it(`fetches at most ${SNAPSHOT_CONCURRENCY} snapshots at a time`, async () => {
+    const shas = Array.from({ length: 20 }, (_, i) => `sha${i}`);
+    const seen: string[] = [];
+    const stub: Engine = {
+      plan: () => ({
+        found: true,
+        league: { name: "Stub", season: "2026", status: "in_season", week: 6 },
+        chain: [meta.league_id],
+        snapshot_shas: shas,
+        teams: [],
+      }),
+      build: (lookup) => {
+        for (const sha of shas) if (lookup(`snapshot/${sha}`) === `csv ${sha}`) seen.push(sha);
+        return { ok: true, report: { league_id: meta.league_id, roster_id: 1, summary: {}, board_data: {}, brief: "" } };
+      },
+      loadedModules: () => [],
+    };
+    const served = { ...pages, ...Object.fromEntries(shas.map((sha) => [snapshotUrl(sha), `csv ${sha}`])) };
+    const { f, deps } = setup({ served });
+    const report = await runReport({ leagueId: meta.league_id, team: meta.team }, { ...deps, engine: async () => stub }, () => {});
+    expect(seen).toEqual(shas);
+    expect(report.notices).toEqual([]);
+    expect(f.snapshots.maxInFlight).toBe(SNAPSHOT_CONCURRENCY);
+  });
 
   it("reads a state/nfl body of literal null as no state", async () => {
     const { deps } = setup({ served: { ...pages, [`${SLEEPER}state/nfl`]: "null" } });

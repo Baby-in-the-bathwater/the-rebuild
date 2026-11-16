@@ -1,5 +1,5 @@
 import type { EngineRequest, EngineResponse, ReportRequest } from "./protocol";
-import type { Report } from "./python";
+import type { RunResult } from "../report/run";
 
 export interface WorkerLike {
   postMessage(msg: unknown): void;
@@ -24,7 +24,7 @@ type Pending = {
 
 export function createEngine(worker: WorkerLike): {
   ping(): Promise<string>;
-  report(req: ReportRequest, onProgress: (line: string) => void): Promise<Report>;
+  report(req: ReportRequest, onProgress: (line: string) => void): Promise<RunResult>;
 } {
   let nextId = 1;
   const pending = new Map<number, Pending>();

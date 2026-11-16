@@ -126,6 +126,7 @@ def _inputs(api, league_id, run_at, log):
         note = f" (shipped benchmark built {bm['built']}; run with --pool to crawl a fresh one)"
     else:
         bm, note = None, " (no benchmark for this format yet)"
+        log("no benchmark for this league format: depth is graded at the middle of the pool")
     own = engine.own_bundles(league, chain, history)
     try:
         index, snapshots = _snapshots(api, own)

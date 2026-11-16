@@ -142,6 +142,19 @@ class ApiTest(unittest.TestCase):
             self.assertTrue(self.build()["ok"])
         self.assertEqual((got["benchmark"], got["benchmark_note"]), (None, " (no benchmark for this format yet)"))
 
+    def test_build_says_when_no_benchmark_matches_the_format(self):
+        note = "no benchmark for this league format: depth is graded at the middle of the pool"
+        lines = []
+        self.assertTrue(self.build(log=lines.append)["ok"])
+        self.assertNotIn(note, lines)
+        with tempfile.TemporaryDirectory() as empty:
+            web_api.BENCHMARK_DIR = empty
+            lines = []
+            out = self.build(log=lines.append)
+        self.assertTrue(out["ok"])
+        self.assertIsNone(out["report"]["summary"]["benchmark"])
+        self.assertEqual(lines.count(note), 1)
+
     def test_build_errors(self):
         out = self.build(team="No Such Team")
         self.assertEqual((out["ok"], out["kind"]), (False, "team"))

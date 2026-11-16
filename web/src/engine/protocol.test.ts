@@ -1,9 +1,8 @@
 import { expect, test } from "vitest";
-import type { Report } from "./python";
 import { createHandler, type EngineRequest, type EngineResponse, type Runner } from "./protocol";
-import { ReportError } from "../report/run";
+import { ReportError, type RunResult } from "../report/run";
 
-const report = (team: string): Report => ({ league_id: "L1", roster_id: 3, summary: { team }, board_data: {}, brief: team });
+const report = (team: string): RunResult => ({ league_id: "L1", roster_id: 3, summary: { team }, board_data: {}, brief: team, notices: [] });
 
 const replies = async (run: Runner, req: EngineRequest) => {
   const out: EngineResponse[] = [];
@@ -39,6 +38,13 @@ test("a report request posts its progress lines in order, then the report", asyn
     { id: 3, type: "progress", line: "pulling league" },
     { id: 3, type: "progress", line: "grading" },
     { id: 3, type: "report", report: report("Team 3") },
+  ]);
+});
+
+test("a report carries the runner's notices to the page", async () => {
+  const noted = { ...report("Team 3"), notices: ["Trade history could not be loaded this time."] };
+  expect(await replies(async () => noted, { id: 6, type: "report", leagueId: "L1", team: "Team 3" })).toEqual([
+    { id: 6, type: "report", report: noted },
   ]);
 });
 

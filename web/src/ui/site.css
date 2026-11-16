@@ -1,7 +1,8 @@
-/* The site's own pages (the form, the board's progress and error screens) and its fixed controls over the board.
+/* The site's own pages (the form, the board's progress and error screens), its fixed controls over the board and the
+   notices above it.
    Every selector is scoped to a site-* class, and every token is named --site-*, so nothing here reaches the board's
    markup or overrides the board's own CSS. Colours and fonts are the board's (rebuild/templates/board.css). */
-.site-page, .site-controls {
+.site-page, .site-controls, .site-notices {
   --site-bg:#0f1420; --site-panel:#171d2c; --site-line:#2a3245; --site-fg:#e8ecf4; --site-muted:#8e98ad;
   --site-accent:#f5c542; --site-on-accent:#1a1400; --site-bad:#ff6b6b; --site-good:#4cd97b;
   --site-display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;
@@ -9,7 +10,7 @@
   color-scheme:dark;
 }
 @media (prefers-color-scheme: light) {
-  .site-page, .site-controls {
+  .site-page, .site-controls, .site-notices {
     --site-bg:#f3f4f8; --site-panel:#ffffff; --site-line:#d8dce6; --site-fg:#141a28; --site-muted:#5d6678;
     --site-accent:#b8860b; --site-on-accent:#ffffff; --site-bad:#c93b3b; --site-good:#1f8a4c;
     color-scheme:light;
@@ -71,3 +72,10 @@ body.site-page {
 }
 .site-controls .site-btn { min-height:32px; padding:4px 12px; font-size:13px; background:transparent; border-color:transparent }
 .site-controls .site-btn:hover { border-color:var(--site-line) }
+
+/* Above the board: what this report could not do as a full run would. */
+.site-notices { display:grid; gap:6px; margin:12px 0 0; font:14px/1.4 var(--site-body) }
+.site-notice {
+  margin:0; padding:8px 12px; color:var(--site-fg); background:var(--site-panel);
+  border:1px solid var(--site-line); border-left:4px solid var(--site-accent); border-radius:6px; overflow-wrap:anywhere;
+}

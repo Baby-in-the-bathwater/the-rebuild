@@ -1,6 +1,5 @@
 // The messages between the page and the engine worker, and how the worker answers them (testable without a Worker).
-import { ReportError } from "../report/run";
-import type { Report } from "./python";
+import { ReportError, type RunResult } from "../report/run";
 
 export type ReportRequest = { leagueId: string; team: string; fresh?: boolean };
 
@@ -9,13 +8,13 @@ export type EngineRequest = { id: number; type: "ping" } | ({ id: number; type: 
 export type EngineResponse =
   | { id: number; type: "pong"; engine: string }
   | { id: number; type: "progress"; line: string }
-  | { id: number; type: "report"; report: Report }
+  | { id: number; type: "report"; report: RunResult }
   | { id: number; type: "error"; message: string; kind?: string };
 
 export const ENGINE_NAME = "placeholder";
 
 /** Runs one report (in the worker, `runReport` with the worker's dependencies). */
-export type Runner = (req: ReportRequest, onProgress: (line: string) => void) => Promise<Report>;
+export type Runner = (req: ReportRequest, onProgress: (line: string) => void) => Promise<RunResult>;
 
 /** Answers each request through `post`: a ping with one pong; a report with its progress lines, then one report or
  * one error. Resolves once the last reply is posted. */

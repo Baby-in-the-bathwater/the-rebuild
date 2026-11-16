@@ -4,6 +4,7 @@ import body from "../../../rebuild/templates/board_body.html?raw";
 import boardJs from "../../../rebuild/templates/board.js?raw";
 import weightsJs from "../../../rebuild/templates/board_weights.js?raw";
 import { createEngine, type WorkerLike } from "../engine/client";
+import type { RunResult } from "../report/run";
 import { validLeagueId } from "./form";
 
 export type BoardSources = { css: string; body: string; weightsJs: string; boardJs: string };
@@ -60,12 +61,34 @@ function controls(doc: Document, win: Window): HTMLElement {
 /** Room under the board for the fixed controls, so they never cover its last lines. */
 export const CONTROLS_CLEARANCE = "calc(72px + env(safe-area-inset-bottom, 0px))";
 
+/** Shown above the board when no shipped benchmark matches the league's format (the summary's benchmark is null). */
+export const NO_BENCHMARK_NOTICE =
+  "No comparison pool exists for this league's format yet, so roster depth is graded as average. Calls and deals may differ from a full run.";
+
+/** What the page says above the board: what the report itself lacks, then what this run could not load. */
+export function boardNotices(report: RunResult): string[] {
+  return [...(report.summary.benchmark === null ? [NO_BENCHMARK_NOTICE] : []), ...report.notices];
+}
+
+/** The notices as text, in the site's own markup and outside the board's. */
+function noticeList(doc: Document, notices: string[]): HTMLElement {
+  const box = el(doc, "div", { class: "site-notices" });
+  for (const text of notices) box.append(el(doc, "p", { class: "site-notice", role: "note" }, text));
+  return box;
+}
+
 export type BoardWorker = WorkerLike & { terminate(): void };
 const engineWorker = (): BoardWorker =>
   new Worker(new URL("../engine/worker.ts", import.meta.url), { type: "module" });
 
-/** Runs the board page in `doc`: a progress list, then the board or the error. `createWorker` is for tests. */
-export function startBoard(doc: Document, win: Window, createWorker: () => BoardWorker = engineWorker): void {
+/** Runs the board page in `doc`: a progress list, then the board or the error. `createWorker` and `sources` are for
+ * tests. */
+export function startBoard(
+  doc: Document,
+  win: Window,
+  createWorker: () => BoardWorker = engineWorker,
+  sources: BoardSources = BOARD_SOURCES,
+): void {
   const main = doc.getElementById("site-main");
   if (!main) throw new Error("the board page is missing #site-main");
   const query = parseQuery(win.location.search);
@@ -111,7 +134,9 @@ export function startBoard(doc: Document, win: Window, createWorker: () => Board
     .report({ ...query, ...(fresh ? { fresh: true } : {}) }, step)
     .then((report) => {
       worker.terminate();
-      mountBoard(doc, BOARD_SOURCES, report.board_data);
+      mountBoard(doc, sources, report.board_data);
+      const notices = boardNotices(report);
+      if (notices.length) doc.body.prepend(noticeList(doc, notices));
       doc.body.append(controls(doc, win));
       doc.body.style.paddingBottom = CONTROLS_CLEARANCE;
     })

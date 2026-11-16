@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EngineRequest, EngineResponse } from "../engine/protocol";
-import { startBoard, type BoardWorker } from "./board";
+import { TRADE_HISTORY_NOTICE } from "../report/run";
+import { NO_BENCHMARK_NOTICE, startBoard, type BoardSources, type BoardWorker } from "./board";
 import { webRoot } from "../testing/fixture";
 
 /** A worker that records each request and answers it with `reply` (after a tick, as a real worker would). */
@@ -29,6 +30,16 @@ function stubWorker(reply: (req: EngineRequest) => Omit<EngineResponse, "id">) {
 }
 
 const failing = (message: string) => stubWorker(() => ({ type: "error", message, kind: "league" }) as const);
+const benchmark = { label: "12-team superflex", team_seasons: 120, built: "2026-01-01" };
+const succeeding = (summary: Record<string, unknown>, notices: string[] = []) =>
+  stubWorker(() => ({
+    type: "report",
+    report: { league_id: "42", roster_id: 3, summary, board_data: { league: "Synthetic" }, brief: "", notices },
+  }));
+/** The board's markup without its scripts: the board itself is tested in board.test.ts. */
+const sources: BoardSources = { css: "", body: '<div id="rosters"></div>', weightsJs: "", boardJs: "" };
+const noticesShown = () => [...document.querySelectorAll(".site-notice")].map((n) => n.textContent);
+const boardShown = () => vi.waitFor(() => expect(document.getElementById("rosters")).not.toBeNull());
 
 function open(path: string) {
   window.history.replaceState(null, "", path);
@@ -100,6 +111,59 @@ describe("startBoard", () => {
     await errorShown();
     const again = [...main().querySelectorAll("a")].find((a) => a.textContent === "Try again")!;
     expect(again.getAttribute("href")).toBe("/board?league=42&team=Team+3&fresh=1");
+  });
+
+  it("says above the board when the league's format has no comparison pool", async () => {
+    open("/board?league=42&team=Team+3");
+    startBoard(document, window, () => succeeding({ benchmark: null }), sources);
+    await boardShown();
+    expect(noticesShown()).toEqual([NO_BENCHMARK_NOTICE]);
+    expect(NO_BENCHMARK_NOTICE).toBe(
+      "No comparison pool exists for this league's format yet, so roster depth is graded as average. Calls and deals may differ from a full run.",
+    );
+    expect(document.body.firstElementChild!.classList.contains("site-notices")).toBe(true);
+  });
+
+  it("shows no notice for a report with a benchmark", async () => {
+    open("/board?league=42&team=Team+3");
+    startBoard(document, window, () => succeeding({ benchmark }), sources);
+    await boardShown();
+    expect(noticesShown()).toEqual([]);
+    expect(document.querySelector(".site-notices")).toBeNull();
+  });
+
+  it("shows the run's notices as text", async () => {
+    open("/board?league=42&team=Team+3");
+    const markup = "<b>not bold</b>";
+    startBoard(document, window, () => succeeding({ benchmark: null }, [TRADE_HISTORY_NOTICE, markup]), sources);
+    await boardShown();
+    expect(noticesShown()).toEqual([NO_BENCHMARK_NOTICE, TRADE_HISTORY_NOTICE, markup]);
+    expect(document.querySelector(".site-notices b")).toBeNull();
+  });
+
+  it("puts the site's page back with the error and Try again when mounting the board fails", async () => {
+    open("/board?league=42&team=Team+3");
+    // mountBoard sets the data after it has replaced the page with the board's markup
+    Object.defineProperty(window, "__BOARD_DATA__", {
+      configurable: true,
+      set() {
+        throw new Error("the board could not start");
+      },
+    });
+    try {
+      const worker = succeeding({ benchmark });
+      startBoard(document, window, () => worker, sources);
+      await errorShown();
+      expect(worker.terminated).toBe(true);
+    } finally {
+      delete (window as unknown as { __BOARD_DATA__?: unknown }).__BOARD_DATA__;
+    }
+    expect(document.body.className).toBe("site-page");
+    expect([...document.body.children]).toEqual([main()]);
+    expect(document.querySelector(".site-message")!.textContent).toBe("the board could not start");
+    const again = [...main().querySelectorAll("a")].find((a) => a.textContent === "Try again")!;
+    expect(again.getAttribute("href")).toBe("/board?league=42&team=Team+3");
+    expect(document.title).toBe("No board · The Rebuild");
   });
 
   it("makes Try again repeat a normal run without fresh", async () => {
