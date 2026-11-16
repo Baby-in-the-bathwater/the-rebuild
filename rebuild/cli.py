@@ -145,11 +145,16 @@ def main(argv=None, api=None):
             gathered, team = gather(api, a, log), a.team
         r = engine.build_report(gathered, team, log=log, stages=stages)
     except ValueError as e:
+        if not a.replay:
+            raise
         print(f"error: {e}", file=sys.stderr)
         return 2
     if not a.replay:
         api_calls = api.calls
-    out = a.out or os.path.join(HERE, "out", "replay") if a.replay else out_dir(a, r["league_id"])
+    if a.replay:
+        out = a.out or os.path.join(HERE, "out", "replay")
+    else:
+        out = out_dir(a, r["league_id"])
     os.makedirs(out, exist_ok=True)
 
     html = board.render(r["board_data"], os.path.join(out, "trade-board.html"))
@@ -170,7 +175,7 @@ def main(argv=None, api=None):
         for name, value in stages.items():
             with open(os.path.join(out, "stages", f"{name}.json"), "w", encoding="utf-8") as f:
                 json.dump(value, f, indent=1)
-    log(f"done: {api_calls} Sleeper calls")
+    log(f"done: replayed from {a.replay}" if a.replay else f"done: {api_calls} Sleeper calls")
     print(f"\n{summary['team']}: {summary['mode'].upper()} (contend in {summary['window']})")
     for reason in summary["reasons"]:
         print(f"  - {reason}")
@@ -179,7 +184,7 @@ def main(argv=None, api=None):
         try:
             inputs_mod.save(gathered, a.record, team)
         except ValueError as e:
-            print(f"error: {e}", file=sys.stderr)
+            print(f"error: {e}; the report was written, the recording was not saved", file=sys.stderr)
             return 2
         print(f"  recording    {a.record} (holds the league's data; keep it out of public repos)")
     if a.open:

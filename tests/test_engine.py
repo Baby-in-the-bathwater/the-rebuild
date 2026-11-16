@@ -264,7 +264,7 @@ class GatherTest(unittest.TestCase):
 
 
 class RecordReplayTest(unittest.TestCase):
-    FILES = ("summary.json", "board-data.json", "brief.md")
+    FILES = ("summary.json", "board-data.json", "brief.md", "trade-board.html")
 
     def run_cli(self, argv, api=None):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -343,9 +343,24 @@ class RecordReplayTest(unittest.TestCase):
     def test_unsafe_league_id_to_record_exits_2(self):
         i = synth_league.make_inputs()
         i["history"]["../x"] = {}
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cli, "gather", return_value=i):
-            self.assertEqual(self.run_cli(["--league", "1", "--team", "Team 3", "--out", os.path.join(tmp, "a"),
-                                           "--record", os.path.join(tmp, "rec")], api=mock.Mock(calls=0)), 2)
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cli, "gather", return_value=i), contextlib.redirect_stderr(err):
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = cli.main(["--league", "1", "--team", "Team 3", "--out", os.path.join(tmp, "a"),
+                                 "--record", os.path.join(tmp, "rec")], api=mock.Mock(calls=0))
+            self.assertTrue(os.path.exists(os.path.join(tmp, "a", "summary.json")))
+        self.assertEqual(code, 2)
+        self.assertIn("the report was written, the recording was not saved", err.getvalue())
+
+    def test_normal_run_value_error_propagates(self):
+        argv = ["--league", "1", "--team", "Team 3", "--out", "unused"]
+        with mock.patch.object(cli, "gather", side_effect=ValueError("boom")):
+            with self.assertRaisesRegex(ValueError, "boom"):
+                self.run_cli(argv, api=mock.Mock(calls=0))
+        with mock.patch.object(cli, "gather", return_value=synth_league.make_inputs()), \
+                mock.patch.object(engine, "build_report", side_effect=ValueError("engine boom")):
+            with self.assertRaisesRegex(ValueError, "engine boom"):
+                self.run_cli(argv, api=mock.Mock(calls=0))
 
 
 if __name__ == "__main__":
