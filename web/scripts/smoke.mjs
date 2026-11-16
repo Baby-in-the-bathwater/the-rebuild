@@ -1,13 +1,16 @@
 // Smoke test in a real browser: the built site under `wrangler dev`, headless Chrome, Sleeper and GitHub answered
-// from the synthetic fixture. Not part of CI. Run `pnpm build` first, then `node scripts/smoke.mjs`.
+// from the synthetic fixture. Not part of CI. Run `pnpm build` first, then `node scripts/smoke.mjs`. It serves a
+// temporary copy of dist/ and leaves dist/ unchanged.
 //
 //   SMOKE_PUPPETEER  folder holding puppeteer-core (default: the spike's node_modules)
 //   SMOKE_CHROME     Chrome executable (default: the macOS install)
 //   SMOKE_PORT       port for wrangler dev (default 8787)
 //   SMOKE_SHOT       if set, a PNG path for a screenshot of the first board
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -27,6 +30,7 @@ const { default: puppeteer } = await import(
 // id instead, and the fixture answers for it: in urls it reads as L1, and in bodies the JSON string "L1" reads as it.
 const meta = JSON.parse(readFileSync(join(fixture, "meta.json"), "utf8"));
 const ALIAS = "9000001";
+const UNKNOWN = "9000002"; // not in the fixture: every Sleeper request for it is answered 404
 const http = JSON.parse(readFileSync(join(fixture, "http.json"), "utf8"));
 const expected = JSON.parse(readFileSync(join(fixture, "expected", "board-data.json"), "utf8"));
 const INTERCEPTED = new Set(["api.sleeper.app", "raw.githubusercontent.com"]);
@@ -43,14 +47,47 @@ const fail = (message) => {
 };
 
 if (!existsSync(join(dist, "board.html"))) fail("no dist/board.html: run `pnpm build` first");
-mkdirSync(join(dist, "data"), { recursive: true });
-for (const name of ["players.json", "snapshot_index.json"]) copyFileSync(join(fixture, name), join(dist, "data", name));
 
-const server = spawn("pnpm", ["exec", "wrangler", "dev", "--ip", "127.0.0.1", "--port", String(PORT)], {
-  cwd: web,
-  env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
-  stdio: ["ignore", "pipe", "pipe"],
-});
+// Serve a copy of dist/ from outside the repo, with the fixture's data added there, so dist/ itself never holds
+// synthetic data that a later deploy could ship.
+const site = mkdtempSync(join(tmpdir(), "rebuild-smoke-"));
+const assets = join(site, "assets");
+cpSync(dist, assets, { recursive: true });
+mkdirSync(join(assets, "data"), { recursive: true });
+for (const name of ["players.json", "snapshot_index.json"]) copyFileSync(join(fixture, name), join(assets, "data", name));
+
+let server = null;
+let cleaned = false;
+/** Stops wrangler dev and its workerd (the whole process group) and removes the copy. Safe to call twice. */
+function cleanup() {
+  if (cleaned) return;
+  cleaned = true;
+  if (server?.pid) {
+    try {
+      process.kill(-server.pid, "SIGTERM");
+    } catch {
+      // already gone
+    }
+  }
+  rmSync(site, { recursive: true, force: true });
+}
+process.on("exit", cleanup);
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
+
+const portFree = () =>
+  new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(false));
+    probe.listen(PORT, "127.0.0.1", () => probe.close(() => resolve(true)));
+  });
+if (!(await portFree())) fail(`port ${PORT} is already in use (another wrangler dev?); stop it or set SMOKE_PORT`);
+
+// wrangler.jsonc still applies (not_found_handling, html_handling); --assets only points it at the copy.
+server = spawn(
+  "pnpm",
+  ["exec", "wrangler", "dev", "--ip", "127.0.0.1", "--port", String(PORT), "--assets", assets, "--persist-to", join(site, "state")],
+  { cwd: web, env: { ...process.env, WRANGLER_SEND_METRICS: "false" }, stdio: ["ignore", "pipe", "pipe"], detached: true },
+);
 let serverLog = "";
 server.stdout.on("data", (d) => (serverLog += d));
 server.stderr.on("data", (d) => (serverLog += d));
@@ -67,13 +104,10 @@ async function waitForServer() {
   fail(`wrangler dev did not start:\n${serverLog}`);
 }
 
-const browser = await (async () => {
-  await waitForServer();
-  return puppeteer.launch({ executablePath: CHROME, headless: true, args: ["--no-first-run"] });
-})().catch((e) => {
-  server.kill();
-  throw e;
-});
+await waitForServer();
+const notFound = await fetch(`${ORIGIN}/no-such-page`);
+if (notFound.status !== 404 || !(await notFound.text()).includes("Not found")) fail(`/no-such-page answered ${notFound.status} without the 404 page`);
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ["--no-first-run"] });
 
 const problems = [];
 const requests = [];
@@ -143,6 +177,7 @@ try {
   const title = await page.title();
   if (title !== `${expected.league} Trade Board`) fail(`title is "${title}"`);
   if (!(await page.$(".site-controls"))) fail("no site controls over the board");
+  if (!(await page.evaluate(() => document.body.style.paddingBottom))) fail("no room under the board for the controls");
   if (process.env.SMOKE_SHOT) await page.screenshot({ path: process.env.SMOKE_SHOT });
   const strangers = requests.filter((u) => !ALLOWED.has(new URL(u).host));
   if (strangers.length) fail(`requests to other hosts: ${strangers.join(", ")}`);
@@ -161,8 +196,11 @@ try {
   if (problems.length) fail(`errors on the reload:\n  ${problems.join("\n  ")}`);
   console.log(`reload: cached board ${seconds(cached.board)}, no Sleeper or GitHub requests`);
 
-  // 4. An unknown league says so.
+  // 4. A league id that is not all digits gets the link back to the form; an unknown league says it was not found.
   await page.goto(`${ORIGIN}/board?league=NOPE1&team=x`, { waitUntil: "load" });
+  await page.waitForSelector('#site-main a[href="/"]');
+  if (await page.$(".site-progress")) fail("a league id that is not all digits started a report");
+  await page.goto(`${ORIGIN}/board?league=${UNKNOWN}&team=x`, { waitUntil: "load" });
   await page.waitForSelector(".site-message", { timeout: 120_000 });
   const message = await page.$eval(".site-message", (n) => n.textContent);
   if (!/not found/i.test(message)) fail(`unknown league message: ${message}`);
@@ -176,5 +214,5 @@ try {
   throw e;
 } finally {
   await browser.close();
-  server.kill();
+  cleanup();
 }

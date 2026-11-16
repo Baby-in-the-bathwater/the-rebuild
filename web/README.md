@@ -12,13 +12,13 @@ Install with `pnpm install --frozen-lockfile`. The esbuild and Wrangler's worker
 ## Commands
 
 - `pnpm prepare-assets`: build `public/engine/engine.zip` (needs `python3` on PATH) and copy the Pyodide runtime into `public/pyodide/<version>/`. Both are generated and git-ignored. Run it once before `pnpm dev`, and again after changing `rebuild/` or the `pyodide` version.
-- `pnpm data`: write the two shared data files into `public/data/` (see "Data files" below). Needs `python3` and the network; run it once before `pnpm dev` or `node scripts/smoke.mjs` if you want the real files. `pnpm build` does not run it.
+- `pnpm data`: write the two shared data files into `public/data/` (see "Data files" below). Needs `python3` and the network; run it once before `pnpm dev` if you want the real files (the smoke test always uses the synthetic fixture's). `pnpm build` does not run it.
 - `pnpm dev`: start the Vite dev server (run `pnpm prepare-assets` first).
 - `pnpm build`: run `prepare-assets`, type-check, then build the site into `dist/`.
 - `pnpm typecheck`: run `tsc --noEmit`.
 - `pnpm test`: run the Vitest suite once.
 - `pnpm preview`: serve `dist/` locally with `wrangler dev` (run `pnpm build` first).
-- `node scripts/smoke.mjs`: the browser smoke test (not part of CI; run `pnpm build` first). It copies the synthetic fixture's `players.json` and `snapshot_index.json` into `dist/data/`, serves `dist/` with `wrangler dev`, and drives headless Chrome through the form, the board, a reload from the cache and an unknown league, answering Sleeper and GitHub from `fixtures/synth/http.json`. It needs Chrome and `puppeteer-core`, which is not a dependency of this package: set `SMOKE_CHROME` and `SMOKE_PUPPETEER` (a `node_modules` folder holding `puppeteer-core`) if the defaults do not fit your machine.
+- `node scripts/smoke.mjs`: the browser smoke test (not part of CI; run `pnpm build` first). It copies `dist/` to a temporary folder outside the repo, adds the synthetic fixture's `players.json` and `snapshot_index.json` to the copy's `data/`, serves the copy with `wrangler dev --assets` (so `dist/` never holds fixture data), removes it at the end, and drives headless Chrome through the form, the board, a reload from the cache, a malformed league id and an unknown one, answering Sleeper and GitHub from `fixtures/synth/http.json`. It needs Chrome and `puppeteer-core`, which is not a dependency of this package: set `SMOKE_CHROME` and `SMOKE_PUPPETEER` (a `node_modules` folder holding `puppeteer-core`) if the defaults do not fit your machine. It stops at once if its port (`SMOKE_PORT`, default 8787) is taken.
 
 ## Data files
 

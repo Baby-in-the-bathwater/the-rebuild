@@ -3,7 +3,8 @@ import css from "../../../rebuild/templates/board.css?raw";
 import body from "../../../rebuild/templates/board_body.html?raw";
 import boardJs from "../../../rebuild/templates/board.js?raw";
 import weightsJs from "../../../rebuild/templates/board_weights.js?raw";
-import { createEngine } from "../engine/client";
+import { createEngine, type WorkerLike } from "../engine/client";
+import { validLeagueId } from "./form";
 
 export type BoardSources = { css: string; body: string; weightsJs: string; boardJs: string };
 
@@ -56,12 +57,19 @@ function controls(doc: Document, win: Window): HTMLElement {
   return box;
 }
 
-/** Runs the board page in `doc`: a progress list, then the board or the error. */
-export function startBoard(doc: Document, win: Window): void {
+/** Room under the board for the fixed controls, so they never cover its last lines. */
+export const CONTROLS_CLEARANCE = "calc(72px + env(safe-area-inset-bottom, 0px))";
+
+export type BoardWorker = WorkerLike & { terminate(): void };
+const engineWorker = (): BoardWorker =>
+  new Worker(new URL("../engine/worker.ts", import.meta.url), { type: "module" });
+
+/** Runs the board page in `doc`: a progress list, then the board or the error. `createWorker` is for tests. */
+export function startBoard(doc: Document, win: Window, createWorker: () => BoardWorker = engineWorker): void {
   const main = doc.getElementById("site-main");
   if (!main) throw new Error("the board page is missing #site-main");
   const query = parseQuery(win.location.search);
-  if (!query) {
+  if (!query || !validLeagueId(query.leagueId)) {
     const actions = el(doc, "p", { class: "site-actions" });
     actions.append(el(doc, "a", { class: "site-btn site-primary", href: "/" }, "Open the form"));
     main.replaceChildren(
@@ -94,23 +102,34 @@ export function startBoard(doc: Document, win: Window): void {
   );
   step("starting");
 
-  const worker = new Worker(new URL("../engine/worker.ts", import.meta.url), { type: "module" });
+  // "Try again" repeats this run as it was asked for, fresh or not.
+  const again = new URL(url.href);
+  if (fresh) again.searchParams.set("fresh", "1");
+
+  const worker = createWorker();
   createEngine(worker)
     .report({ ...query, ...(fresh ? { fresh: true } : {}) }, step)
     .then((report) => {
       worker.terminate();
       mountBoard(doc, BOARD_SOURCES, report.board_data);
       doc.body.append(controls(doc, win));
+      doc.body.style.paddingBottom = CONTROLS_CLEARANCE;
     })
     .catch((e: unknown) => {
       worker.terminate();
       doc.title = `No board · The Rebuild`;
       const message = el(doc, "p", { class: "site-message", role: "alert" }, e instanceof Error ? e.message : String(e));
-      const again = el(doc, "button", { class: "site-btn site-primary", type: "button" }, "Try again");
-      again.addEventListener("click", () => win.location.reload());
       const actions = el(doc, "p", { class: "site-actions" });
-      actions.append(again, el(doc, "a", { class: "site-btn", href: "/" }, "Back to the form"));
+      actions.append(
+        el(doc, "a", { class: "site-btn site-primary", href: again.pathname + again.search }, "Try again"),
+        el(doc, "a", { class: "site-btn", href: "/" }, "Back to the form"),
+      );
       main.replaceChildren(el(doc, "h1", { class: "site-title" }, "No board this time"), message, actions);
-      if (!main.isConnected) doc.body.replaceChildren(main); // the board failed part way through mounting
+      // mountBoard threw after replacing the page (an error inside board.js itself is reported by the browser, not
+      // here): put the site's page back so the error screen is styled.
+      if (!main.isConnected) {
+        doc.body.className = "site-page";
+        doc.body.replaceChildren(main);
+      }
     });
 }
