@@ -118,6 +118,50 @@ class InputsFolderTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "is version 2, expected 1"):
                 inputs.load(d)
 
+    def test_unsafe_names_are_refused_before_anything_is_written(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            folder = os.path.join(d, "rec")
+            with self.assertRaisesRegex(ValueError, r'cannot record league "\.\./evil": not a safe file name'):
+                inputs.save(dict(i, history={"../evil": {}}), folder, "Team 3")
+            with self.assertRaisesRegex(ValueError, r'cannot record snapshot "a/b": not a safe file name'):
+                inputs.save(dict(i, snapshots={"a/b": "x"}), folder, "Team 3")
+            self.assertEqual(os.listdir(d), [])
+
+    def test_saving_again_replaces_the_old_recording(self):
+        i = synth_league.make_inputs()
+        two = dict(i, history={"L0": {"a": 1}, "L9": {"b": 2}}, snapshots={"aaa": "x", "bbb": "y"})
+        one = dict(i, history={"L0": {"a": 1}}, snapshots={"aaa": "x"})
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(two, d, "Team 3")
+            open(os.path.join(d, "notes.txt"), "w").close()
+            inputs.save(one, d, "Team 3")
+            loaded, _ = inputs.load(d)
+            self.assertEqual(set(loaded["history"]), {"L0"})
+            self.assertEqual(set(loaded["snapshots"]), {"aaa"})
+            self.assertTrue(os.path.exists(os.path.join(d, "notes.txt")))
+
+    def test_bad_meta_json(self):
+        i = synth_league.make_inputs()
+        for bad in ("[]", '{"version": 1}'):
+            with tempfile.TemporaryDirectory() as d:
+                inputs.save(i, d, "Team 3")
+                with open(os.path.join(d, "meta.json"), "w") as f:
+                    f.write(bad)
+                with self.assertRaisesRegex(ValueError, "has a bad meta.json"):
+                    inputs.load(d)
+
+    def test_round_trip_edges(self):
+        i = synth_league.make_inputs()
+        empty = dict(i, benchmark=None, snapshot_index=None, history={}, snapshots={})
+        crlf = dict(i, snapshots={"abc123": "date,x\r\n1,2\r\n"})
+        for case in (empty, crlf):
+            with tempfile.TemporaryDirectory() as d:
+                inputs.save(case, d, "Team 3")
+                loaded, _ = inputs.load(d)
+            self.assertEqual(json.dumps(loaded, sort_keys=True), json.dumps(case, sort_keys=True))
+        self.assertEqual(loaded["snapshots"]["abc123"], "date,x\r\n1,2\r\n")
+
     def test_benchmark_path_is_not_recorded_and_the_input_is_not_changed(self):
         i = synth_league.make_inputs()
         i["benchmark"] = dict(i["benchmark"], _path="/home/someone/benchmarks/x.json")
