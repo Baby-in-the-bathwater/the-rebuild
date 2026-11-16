@@ -7,3 +7,7 @@ venv/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+web/node_modules/
+web/dist/
+web/.wrangler/
