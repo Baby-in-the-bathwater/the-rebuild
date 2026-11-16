@@ -4,7 +4,9 @@
   // Deploy with `wrangler deploy --env staging` or `--env production`.
   "name": "the-rebuild",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "./dist", "not_found_handling": "single-page-application" },
+  // html_handling is left at its default, "auto-trailing-slash": /board serves board.html (and /board.html redirects
+  // to /board). An unknown path gets public/404.html with a 404 status.
+  "assets": { "directory": "./dist", "not_found_handling": "404-page" },
   "env": {
     "staging": { "name": "the-rebuild-staging" },
     "production": { "name": "the-rebuild" }

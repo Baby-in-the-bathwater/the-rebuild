@@ -1,20 +1,113 @@
+import json
 import os
+import re
 import tempfile
 import unittest
+from html.parser import HTMLParser
 from types import SimpleNamespace
 
 from rebuild import board, grade, trades
 
 
 class RenderTest(unittest.TestCase):
-    def test_render_inlines_weights_logic(self):
+    PLACEHOLDERS = ("__TITLE__", "__CSS__", "__BODY__", "__DATA__", "__WEIGHTS_JS__", "__BOARD_JS__")
+
+    def render(self, data):
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "board.html")
-            board.render({"league": "L"}, out)
+            board.render(data, out)
             with open(out, encoding="utf-8") as f:
-                html = f.read()
+                return f.read()
+
+    def test_render_inlines_weights_logic(self):
+        html = self.render({"league": "L"})
         self.assertIn("function curveValue", html)
-        self.assertNotIn("/*__WEIGHTS_JS__*/", html)
+
+    def test_render_inlines_every_part(self):
+        html = self.render({"league": "L"})
+        parts = board.sources()
+        self.assertEqual(set(parts), {"css", "body", "weights_js", "board_js"})
+        for name, text in parts.items():
+            self.assertTrue(text.strip(), name)
+            self.assertIn(text, html, name)
+        self.assertIn("<title>L Trade Board</title>", html)
+
+    def test_board_script_reads_data_from_the_window(self):
+        js = board.sources()["board_js"]
+        self.assertTrue(js.startswith("const DATA = window.__BOARD_DATA__;\n"))
+        self.assertIn('"rebuild-board-" + DATA.league_id', js)
+
+    def test_data_is_assigned_once_and_parses_back(self):
+        data = {"league": "L", "teams": [{"name": "Zed's \u2603 </script><b>"}], "n": 1.5}
+        html = self.render(data)
+        marker = "window.__BOARD_DATA__ = "
+        self.assertEqual(html.count(marker), 1)
+        start = html.index(marker) + len(marker)
+        end = html.index(";\n</script>", start)
+        self.assertEqual(json.loads(html[start:end]), data)
+
+    def test_script_in_a_team_name_does_not_close_the_script_element(self):
+        html = self.render({"league": "L", "teams": [{"name": "</script><img src=x>"}]})
+        self.assertNotIn("</script><img", html)
+        self.assertEqual(html.count("<script"), html.count("</script>"))
+        self.assertEqual(html.count("<script"), 3)
+
+    def test_markup_in_names_reaches_the_page_only_as_script_data(self):
+        """A team, league or owner name with markup must not become an element in the file the CLI writes. The
+        names travel only inside the data script (where they are text); board.js escapes them when it draws."""
+        hostile = '<img src=x onerror="window.__xss=1"> a & b <i>c</i>'
+        html = self.render({"league": hostile, "teams": [{"name": hostile, "owner": hostile}]})
+        tags = []
+
+        class Tags(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                tags.append(tag)
+
+        Tags().feed(html)
+        self.assertNotIn("img", tags)
+        self.assertEqual(tags.count("i"), board.sources()["body"].count("<i "))   # the legend's swatches only
+        outside = re.sub(r"<script\b.*?</script>", "", html, flags=re.S)
+        self.assertNotIn("<img src=x", outside)
+        self.assertIn("&lt;img src=x", outside)   # the title, escaped
+        self.assertIn("esc(team.name)", board.sources()["board_js"])
+
+    def test_comment_opener_in_a_team_name_round_trips_and_keeps_the_scripts_intact(self):
+        data = {"league": "L", "teams": [{"name": "<!--<script>"}]}
+        html = self.render(data)
+        self.assertNotIn("<!--<script>", html)
+        start = html.index("window.__BOARD_DATA__ = ") + len("window.__BOARD_DATA__ = ")
+        end = html.index(";\n</script>", start)
+        self.assertEqual(json.loads(html[start:end]), data)
+        # the same page with the data removed: the script elements are the template's own, no more
+        outside = html[:start] + html[end:]
+        self.assertEqual(outside.count("<script"), 3)
+        self.assertEqual(outside.count("</script>"), 3)
+        self.assertEqual(html.count("</script>"), 3)
+
+    def test_league_name_cannot_break_out_of_the_title(self):
+        html = self.render({"league": "</title><b>x</b>"})
+        head = html[:html.index("</head>")]
+        self.assertNotIn("<b>", head)
+        self.assertEqual(head.count("</title>"), 1)
+        self.assertIn("<title>&lt;/title&gt;&lt;b&gt;x&lt;/b&gt; Trade Board</title>", head)
+
+    def test_no_placeholder_is_left(self):
+        html = self.render({"league": "L"})
+        for ph in self.PLACEHOLDERS:
+            self.assertNotIn(ph, html)
+
+    def test_placeholder_text_in_data_is_kept_as_data(self):
+        html = self.render({"league": "L", "teams": [{"name": "__CSS__"}]})
+        self.assertIn('"name": "__CSS__"', html)
+
+    def test_file_references_nothing_local(self):
+        html = self.render({"league": "L"})
+        urls = re.findall(r'(?:href|src)\s*=\s*["\']([^"\']+)', html)
+        self.assertTrue(urls)
+        for u in urls:
+            self.assertTrue(u.startswith("https://fonts.googleapis.com/"), u)
+        self.assertNotIn("@import", html)
+        self.assertNotRegex(html, r"url\(\s*[\"']?(?!data:|#)")
 
 
 class TeamTypesTest(unittest.TestCase):

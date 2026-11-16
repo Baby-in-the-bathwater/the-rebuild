@@ -1,15 +1,43 @@
-import { createEngine } from "../engine/client";
+// The site's one entry: index.html (the form) and board.html (the board) say which page they are on <body data-page>.
+import "./site.css";
+import { startForm } from "./form";
 
-const status = document.getElementById("engine-status");
-if (!status) throw new Error("missing #engine-status element");
+const storage = (() => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+})();
 
-const worker = new Worker(new URL("../engine/worker.ts", import.meta.url), { type: "module" });
+/** The board page's code did not load (a network error, or an old page asking for a chunk a deploy replaced) or
+ * did not start: say so in place of "Building the trade board". */
+function showLoadFailure(doc: Document): void {
+  const main = doc.getElementById("site-main") ?? doc.body.appendChild(doc.createElement("main"));
+  main.id = "site-main";
+  main.className = "site-main";
+  doc.body.className = "site-page";
+  const title = doc.createElement("h1");
+  title.className = "site-title";
+  title.textContent = "The page did not load";
+  const text = doc.createElement("p");
+  text.className = "site-lede";
+  text.textContent = "Part of this page could not be loaded. Check your connection, then reload.";
+  const reload = doc.createElement("a");
+  reload.className = "site-btn site-primary";
+  reload.href = doc.location.pathname + doc.location.search;
+  reload.textContent = "Reload";
+  const actions = doc.createElement("p");
+  actions.className = "site-actions";
+  actions.append(reload);
+  main.replaceChildren(title, text, actions);
+}
 
-createEngine(worker)
-  .ping()
-  .then((engine) => {
-    status.textContent = `engine ready (${engine})`;
-  })
-  .catch((err: unknown) => {
-    status.textContent = `engine failed: ${err instanceof Error ? err.message : String(err)}`;
-  });
+if (document.body.dataset.page === "board") {
+  // The board page brings the board's sources and the worker; the form page does not need them.
+  import("./board")
+    .then(({ startBoard }) => startBoard(document, window))
+    .catch(() => showLoadFailure(document));
+} else {
+  startForm(document, { storage, navigate: (url) => window.location.assign(url) });
+}

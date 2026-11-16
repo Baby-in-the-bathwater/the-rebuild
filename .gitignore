@@ -11,3 +11,6 @@ desktop.ini
 web/node_modules/
 web/dist/
 web/.wrangler/
+web/public/engine/
+web/public/pyodide/
+web/public/data/

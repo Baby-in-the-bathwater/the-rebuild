@@ -6,7 +6,6 @@ import json
 import os
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
 
 from .league import fmt_of, same_family, strict_match
 
@@ -45,6 +44,16 @@ def fetch_season(api, cache_dir, lid, lg=None, state_week=None, state_season=Non
         # in-season bundle: reuse unless the week moved on
         if state_week and str(lg_e.get("season")) == str(state_season) and existing.get("through_week", 0) >= min(state_week, 18) - 1:
             return existing
+    b = season_bundle(api, lid, lg=lg, state_week=state_week, state_season=state_season)
+    if not b:
+        return None
+    with open(bundle_path(cache_dir, lid), "w", encoding="utf-8") as f:
+        json.dump(b, f)
+    return b
+
+
+def season_bundle(api, lid, lg=None, state_week=None, state_season=None):
+    """One league-season as `fetch_season` caches it, or None if Sleeper has no such league. No disk."""
     lg = lg or api.league(lid)
     if not lg:
         return None
@@ -64,7 +73,7 @@ def fetch_season(api, cache_dir, lid, lg=None, state_week=None, state_season=Non
     for wk in range(1, 19):
         trades.extend([t for t in api.transactions(lid, wk) if t.get("type") == "trade" and t.get("status") == "complete"])
     drafts = api.drafts(lid)
-    b = {
+    return {
         "league": lg,
         "users": api.users(lid),
         "rosters": api.rosters(lid),
@@ -77,9 +86,6 @@ def fetch_season(api, cache_dir, lid, lg=None, state_week=None, state_season=Non
         "through_week": last_wk,
         "fetched": time.strftime("%Y-%m-%d"),
     }
-    with open(bundle_path(cache_dir, lid), "w", encoding="utf-8") as f:
-        json.dump(b, f)
-    return b
 
 
 def walk_lineage(api, cache_dir, root, state_week=None, state_season=None, max_seasons=12):
@@ -105,6 +111,7 @@ def discover_pool(api, league, target=150, seconds=600, threads=12, log=print):
     hi, lo = deque(), deque()
     for u in league.users:
         hi.append(u["user_id"])
+    from concurrent.futures import ThreadPoolExecutor  # lazy: the browser imports this module and has no threads
     t0 = time.time()
     pool = ThreadPoolExecutor(threads)
 
@@ -152,6 +159,7 @@ def discover_pool(api, league, target=150, seconds=600, threads=12, log=print):
 
 def crawl_lineages(api, cache_dir, roots, threads=12, state_week=None, state_season=None, log=print):
     """Walk every root league's history in parallel. Returns {root: [season ids newest first]}."""
+    from concurrent.futures import ThreadPoolExecutor
     t0 = time.time()
     lineages = {}
     done = 0
