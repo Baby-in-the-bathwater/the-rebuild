@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from rebuild import cli, engine, fetch, trade_history
+from rebuild import cli, engine, fetch, inputs, trade_history
 from rebuild.grade import grade, team_types
 from rebuild.league import League
 from rebuild.values import Values
@@ -95,6 +95,47 @@ class GradeTest(unittest.TestCase):
         self.assertEqual(types[4], "retool")   # graded on its own it would be a contender
         self.assertEqual(types[6], "contend")
         self.assertEqual(set(types), set(lg.team_name))
+
+
+class InputsFolderTest(unittest.TestCase):
+    def test_round_trip(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(i, d, "Team 3")
+            loaded, team = inputs.load(d)
+        self.assertEqual(team, "Team 3")
+        self.assertEqual(json.dumps(loaded, sort_keys=True), json.dumps(i, sort_keys=True))
+
+    def test_missing_file_and_wrong_version(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(i, d, "Team 3")
+            os.remove(os.path.join(d, "players.json"))
+            with self.assertRaisesRegex(ValueError, "is missing players.json"):
+                inputs.load(d)
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(dict(i, version=2), d, "Team 3")
+            with self.assertRaisesRegex(ValueError, "is version 2, expected 1"):
+                inputs.load(d)
+
+    def test_benchmark_path_is_not_recorded_and_the_input_is_not_changed(self):
+        i = synth_league.make_inputs()
+        i["benchmark"] = dict(i["benchmark"], _path="/home/someone/benchmarks/x.json")
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(i, d, "Team 3")
+            loaded, _ = inputs.load(d)
+            on_disk = ""
+            for root, _, names in os.walk(d):
+                for n in names:
+                    with open(os.path.join(root, n), encoding="utf-8") as f:
+                        on_disk += f.read()
+        self.assertNotIn("_path", loaded["benchmark"])
+        self.assertNotIn("/home/someone", on_disk)
+        self.assertEqual(i["benchmark"]["_path"], "/home/someone/benchmarks/x.json")
+        self.assertEqual({k: v for k, v in i["benchmark"].items() if k != "_path"}, loaded["benchmark"])
+        a = engine.build_report(i, "Team 3", log=QUIET)
+        b = engine.build_report(loaded, "Team 3", log=QUIET)
+        self.assertEqual(json.dumps(a), json.dumps(b))
 
 
 QUIET = lambda s: None  # noqa: E731
