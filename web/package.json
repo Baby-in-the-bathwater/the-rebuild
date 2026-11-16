@@ -6,7 +6,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "preview": "wrangler dev"
+    "preview": "wrangler dev",
+    "engine": "python3 scripts/build_engine.py"
   },
   "packageManager": "pnpm@12.21.0",
   "type": "module",

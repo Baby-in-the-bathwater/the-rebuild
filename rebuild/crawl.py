@@ -6,7 +6,6 @@ import json
 import os
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
 
 from .league import fmt_of, same_family, strict_match
 
@@ -105,6 +104,7 @@ def discover_pool(api, league, target=150, seconds=600, threads=12, log=print):
     hi, lo = deque(), deque()
     for u in league.users:
         hi.append(u["user_id"])
+    from concurrent.futures import ThreadPoolExecutor  # lazy: the browser imports this module and has no threads
     t0 = time.time()
     pool = ThreadPoolExecutor(threads)
 
@@ -152,6 +152,7 @@ def discover_pool(api, league, target=150, seconds=600, threads=12, log=print):
 
 def crawl_lineages(api, cache_dir, roots, threads=12, state_week=None, state_season=None, log=print):
     """Walk every root league's history in parallel. Returns {root: [season ids newest first]}."""
+    from concurrent.futures import ThreadPoolExecutor
     t0 = time.time()
     lineages = {}
     done = 0
