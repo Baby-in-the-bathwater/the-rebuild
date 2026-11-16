@@ -6,6 +6,8 @@ import time
 
 import requests
 
+from .league import position  # noqa: F401  (moved to league.py; kept here for old imports)
+
 BASE = "https://api.sleeper.app/v1"
 _lock = threading.Lock()
 
@@ -94,10 +96,3 @@ class Sleeper:
     def user(self, name_or_id):
         return self.get(f"user/{name_or_id}")
 
-
-def position(pdb, pid):
-    """Position for a player id; team defenses are alphabetic ids with no players-db row."""
-    p = pdb.get(pid)
-    if p and p.get("position"):
-        return p["position"]
-    return "DEF" if str(pid).isalpha() else "?"

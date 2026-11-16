@@ -5,6 +5,7 @@
 Steps: pull the league, price every asset, walk the league's own history, load (or crawl) the format benchmark,
 grade the roster, make the call, draft the deals, write brief.md + trade-board.html + data JSON."""
 import argparse
+import datetime as dt
 import json
 import os
 import sys
@@ -13,7 +14,7 @@ import webbrowser
 
 from . import benchmarks as bmod
 from . import pdf as pdfmod
-from . import board, report
+from . import board, fetch, report
 from . import trade_history as thmod
 from .crawl import crawl_lineages, discover_pool, load_bundles, walk_lineage
 from .grade import grade, team_types
@@ -47,16 +48,20 @@ def main(argv=None):
     log = lambda s: print(f"[{time.time() - t0:5.0f}s] {s}", flush=True)  # noqa: E731
     api = Sleeper(a.cache_dir)
     log("pulling league")
-    league = League(api, a.league, log=log)
+    state = api.state()
+    pull = fetch.league_pull(api, a.league, state)
+    if not pull:
+        raise SystemExit(f"League {a.league} not found on Sleeper.")
+    league = League(pull, api.players(), state)
+    log(f"league: {league.lg.get('name')} | {fmt_key(league.fmt)} | season {league.season} {league.status} | week {league.week} | {api.calls} calls")
     rid = league.find_team(a.team)
     log(f"team: {league.team_name[rid]} (roster {rid}, manager {league.owner_name[rid]})")
-    values = Values.load(a.cache_dir, league.fmt["superflex"], refresh=a.refresh_values)
+    values = Values.from_csv(fetch.values_csv(a.cache_dir, refresh=a.refresh_values), league.fmt["superflex"])
     log(f"values: DynastyProcess {values.col} as of {values.asof} ({len(values.players)} players)")
     out = a.out or os.path.join(HERE, "out", league.id)
     os.makedirs(out, exist_ok=True)
 
     # own history
-    state = api.state()
     sw, ss = (int(state.get("week") or 0) or None), state.get("season")
     own_bundle = league.bundle()
     chain = [league.id]
@@ -127,7 +132,9 @@ def main(argv=None):
     if not a.no_trade_history:
         log("pricing the league's trade history")
         try:
-            th = thmod.build(a.cache_dir, own_bundles, league, values, log=log)
+            index = fetch.snapshot_index(a.cache_dir) if thmod.completed_trades(own_bundles) else []
+            snapshots = {sha: fetch.snapshot_csv(a.cache_dir, sha) for sha in thmod.needed_snapshots(own_bundles, index)}
+            th = thmod.build(own_bundles, league, values, index, snapshots, now=dt.datetime.now(dt.timezone.utc), log=log)
         except Exception as e:  # network or GitHub rate limit: the rest of the run does not depend on it
             log(f"trade history skipped: {e}")
     ct = report.call_text(g, league, bm, assets)
