@@ -97,9 +97,11 @@ async function build(
 
   onProgress("pulling league");
   const loading = deps.engine();
-  loading.catch(() => {}); // awaited below; a failure before then must not be an unhandled rejection
+  // Awaited below. The rejection handler keeps a failure before then from being an unhandled rejection.
+  loading.then(() => onProgress("engine ready"), () => {});
   const stateText = await api.text("state/nfl");
-  const state = stateText === null ? {} : (JSON.parse(stateText) as { week?: unknown; season?: unknown });
+  // A body of literal `null` reads as no state, as Python's `state/nfl` lookup does.
+  const state = ((stateText === null ? null : JSON.parse(stateText)) ?? {}) as { week?: unknown; season?: unknown };
   const week = Number(state.week) || null;
   const season = state.season == null ? null : String(state.season);
 

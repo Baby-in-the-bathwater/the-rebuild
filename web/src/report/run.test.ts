@@ -36,8 +36,8 @@ afterAll(() => {
   if (tmp) rmSync(tmp, { recursive: true, force: true });
 });
 
-/** A fetch over `pages` that counts requests per url; urls in `failing` answer 500, unknown urls 404. */
-function fakeFetch(failing: Iterable<string> = []) {
+/** A fetch over `served` that counts requests per url; urls in `failing` answer 500, unknown urls 404. */
+function fakeFetch(failing: Iterable<string> = [], served: Record<string, string> = pages) {
   const broken = new Set(failing);
   const calls = new Map<string, number>();
   const fetch = (async (input: RequestInfo | URL) => {
@@ -45,15 +45,15 @@ function fakeFetch(failing: Iterable<string> = []) {
     calls.set(url, (calls.get(url) ?? 0) + 1);
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (broken.has(url)) return new Response("server error", { status: 500 });
-    const body = pages[url];
+    const body = served[url];
     return body === undefined ? new Response("not found", { status: 404 }) : new Response(body, { status: 200 });
   }) as typeof globalThis.fetch;
   const total = () => [...calls.values()].reduce((a, b) => a + b, 0);
   return { fetch, calls, total, reset: () => calls.clear() };
 }
 
-function setup(opts: { failing?: string[]; store?: Store; now?: () => Date } = {}) {
-  const f = fakeFetch(opts.failing);
+function setup(opts: { failing?: string[]; store?: Store; now?: () => Date; served?: Record<string, string> } = {}) {
+  const f = fakeFetch(opts.failing, opts.served);
   const engineCalls = { n: 0 };
   const deps: Deps = {
     fetch: f.fetch,
@@ -106,6 +106,10 @@ describe("runReport", () => {
     ];
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // the engine loads while the league is fetched, so its line comes at any point before the plan's
+    const ready = at((l) => l === "engine ready");
+    expect(ready).toBeGreaterThan(0);
+    expect(ready).toBeLessThan(at((l) => l.startsWith("league: ")));
     expect(lines.find((l) => l.startsWith("league: "))).toMatch(/^league: .+ \| season 2026 \S+ \| week 6$/);
   });
 
@@ -176,6 +180,40 @@ describe("runReport", () => {
       expect(lines.some((l) => l.startsWith("trade history skipped"))).toBe(true);
     });
   }
+
+  it("reads a state/nfl body of literal null as no state", async () => {
+    const { deps } = setup({ served: { ...pages, [`${SLEEPER}state/nfl`]: "null" } });
+    const report = await run(deps).done;
+    expect(report.league_id).toBe(meta.league_id);
+  });
+
+  it("offers the engine every snapshot CSV or none of them", async () => {
+    const shas = ["aaa1111", "bbb2222"];
+    const offered = async (served: Record<string, string>) => {
+      const seen: Record<string, boolean> = {};
+      const stub: Engine = {
+        plan: () => ({
+          found: true,
+          league: { name: "Stub", season: "2026", status: "in_season", week: 6 },
+          chain: [meta.league_id],
+          snapshot_shas: shas,
+          teams: [],
+        }),
+        build: (lookup) => {
+          for (const sha of shas) seen[sha] = lookup(`snapshot/${sha}`) != null;
+          return { ok: true, report: { league_id: meta.league_id, roster_id: 1, summary: {}, board_data: {}, brief: "" } };
+        },
+        loadedModules: () => [],
+      };
+      const { deps } = setup({ served });
+      await runReport({ leagueId: meta.league_id, team: meta.team }, { ...deps, engine: async () => stub }, () => {});
+      return seen;
+    };
+    const both = { ...pages, [snapshotUrl(shas[0]!)]: "csv a", [snapshotUrl(shas[1]!)]: "csv b" };
+    expect(await offered(both)).toEqual({ aaa1111: true, bbb2222: true });
+    const oneMissing = { ...pages, [snapshotUrl(shas[0]!)]: "csv a" };
+    expect(await offered(oneMissing)).toEqual({ aaa1111: false, bbb2222: false });
+  });
 
   it("fails with a data error when the player table cannot be fetched", async () => {
     const { deps } = setup({ failing: [PLAYERS] });
