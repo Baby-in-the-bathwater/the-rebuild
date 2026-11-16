@@ -9,6 +9,7 @@
     "preview": "wrangler dev",
     "engine": "python3 scripts/build_engine.py",
     "pyodide": "node scripts/copy_pyodide.mjs",
+    "data": "python3 scripts/build_data.py",
     "prepare-assets": "pnpm run engine && pnpm run pyodide"
   },
   "packageManager": "pnpm@12.21.0",

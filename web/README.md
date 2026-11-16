@@ -12,12 +12,24 @@ Install with `pnpm install --frozen-lockfile`. The esbuild and Wrangler's worker
 ## Commands
 
 - `pnpm prepare-assets`: build `public/engine/engine.zip` (needs `python3` on PATH) and copy the Pyodide runtime into `public/pyodide/<version>/`. Both are generated and git-ignored. Run it once before `pnpm dev`, and again after changing `rebuild/` or the `pyodide` version.
+- `pnpm data`: write the two shared data files into `public/data/` (see "Data files" below). Needs `python3` and the network; run it once before `pnpm dev` or `node scripts/smoke.mjs` if you want the real files. `pnpm build` does not run it.
 - `pnpm dev`: start the Vite dev server (run `pnpm prepare-assets` first).
 - `pnpm build`: run `prepare-assets`, type-check, then build the site into `dist/`.
 - `pnpm typecheck`: run `tsc --noEmit`.
 - `pnpm test`: run the Vitest suite once.
 - `pnpm preview`: serve `dist/` locally with `wrangler dev` (run `pnpm build` first).
 - `node scripts/smoke.mjs`: the browser smoke test (not part of CI; run `pnpm build` first). It copies the synthetic fixture's `players.json` and `snapshot_index.json` into `dist/data/`, serves `dist/` with `wrangler dev`, and drives headless Chrome through the form, the board, a reload from the cache and an unknown league, answering Sleeper and GitHub from `fixtures/synth/http.json`. It needs Chrome and `puppeteer-core`, which is not a dependency of this package: set `SMOKE_CHROME` and `SMOKE_PUPPETEER` (a `node_modules` folder holding `puppeteer-core`) if the defaults do not fit your machine.
+
+## Data files
+
+`public/data/` is generated and git-ignored, like `public/engine/` and `public/pyodide/`. `scripts/build_data.py` (run with `pnpm data`) writes two files the site fetches at run time:
+
+- `players.json`: Sleeper's player table (`players/nfl`), keyed by player id in Sleeper's order, with each record cut to the fields the engine reads (the `PLAYER_FIELDS` constant in the script says which, and where each is read). The full table is about 10 MB; the trimmed file is a few MB. The browser never fetches Sleeper's full table.
+- `snapshot_index.json`: `[[iso date, sha], ...]`, oldest first, of the DynastyProcess `values.csv` commits (`GITHUB_TOKEN` is used when set, to stay under GitHub's rate limit).
+
+If a download fails, or the new player table has fewer than 80% of the players in the file already in `public/data/`, the script keeps the existing files and exits 1. `--players-from FILE` and `--index-from FILE` read local files instead of the network, and `--out DIR` changes the folder. Sleeper asks clients to fetch the player table at most once a day, so run `pnpm data` sparingly. If `public/data/` does not exist the build still works; the site then cannot load players until the files are there.
+
+The Checks workflow never runs the script and makes no request to Sleeper or GitHub's API. The Deploy workflow runs it, after the Cloudflare secrets check and before the build, so a failure stops the job before anything is deployed.
 
 ## Source folders
 
@@ -44,7 +56,7 @@ Only the Python standard library is loaded: the engine never imports numpy or re
 
 | Environment | Worker name | Deployed by |
 |-|-|-|
-| `staging` | `the-rebuild-staging` | every push to `main` that touches `web/` or `rebuild/` |
+| `staging` | `the-rebuild-staging` | every push to `main` that touches `web/` or `rebuild/`, and a daily schedule (refreshes the data files) |
 | `production` | `the-rebuild` | the Deploy workflow, run by hand |
 
 Which Cloudflare account a deploy goes to depends only on two values, never on a file in the repo:
@@ -54,7 +66,7 @@ Which Cloudflare account a deploy goes to depends only on two values, never on a
 
 ### From GitHub
 
-The Deploy workflow (`.github/workflows/deploy.yml`) runs the checks, builds the site, deploys it and then loads the front page. Set the two values as Actions secrets, either on the repository or on a GitHub environment named `staging` or `production` (an environment's secrets win over the repository's). In a repository with neither, the deploy is skipped with a notice.
+The Deploy workflow (`.github/workflows/deploy.yml`) runs the checks, builds the data files and the site, deploys it and then requests the front page, `/board`, `/data/players.json`, `/data/snapshot_index.json`, `/engine/engine.zip` and the Pyodide `pyodide.asm.wasm`, failing if any is not a 200. Set the two values as Actions secrets, either on the repository or on a GitHub environment named `staging` or `production` (an environment's secrets win over the repository's). In a repository with neither, the deploy is skipped with a notice.
 
 To deploy by hand: Actions, then Deploy, then "Run workflow", and pick the environment. Or:
 

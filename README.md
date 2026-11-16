@@ -50,7 +50,7 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 | **GitHub Action** | no install at all | Fork the repo, Actions tab, "Run the rebuild", enter league id and team, download the artifact from the run page. |
 | **Claude session** | you want to talk it through | Run the CLI, then hand the brief and board to a Claude session for the write-up; the board publishes as a private artifact as is. |
 
-A hosted site is in progress; see [web/README.md](web/README.md).
+A hosted site is in progress; see [web/README.md](web/README.md). Its deploy also publishes a trimmed copy of Sleeper's player table and the values-snapshot index, refreshed daily.
 
 ## Options
 
