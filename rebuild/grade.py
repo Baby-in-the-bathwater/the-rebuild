@@ -116,7 +116,7 @@ def grade(league, values, rid, bm, own_bundle):
     else:
         window = league.season + (2 if young and league.pick_seasons and me["firsts"].get(league.pick_seasons[0], 0) >= 1 else 3)
     now = sum(1 for p in me["players"] if p["pos"] in TH and p["startable"])
-    if now - row["depth"] >= 2:
+    if row and now - row["depth"] >= 2:
         reasons.append(f"roster as built today has {now} startable players against {row['depth']} produced for this team so far: "
                        f"mid-season additions and returning players have not scored here yet, so the depth percentile understates it")
 

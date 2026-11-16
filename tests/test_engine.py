@@ -6,6 +6,7 @@ import sys
 import unittest
 
 from rebuild import fetch, trade_history
+from rebuild.grade import grade
 from rebuild.league import League
 from rebuild.values import Values
 from tests import synth_league
@@ -55,6 +56,16 @@ class PureEngineTest(unittest.TestCase):
         self.assertEqual([t["id"] for t in a["trades"]], [t["id"] for t in b["trades"]])
         for x, y in zip(a["trades"], b["trades"]):
             self.assertEqual(y["days_ago"] - x["days_ago"], 10)
+
+
+class GradeTest(unittest.TestCase):
+    def test_grade_a_team_with_no_metrics_row(self):
+        i = synth_league.make_inputs(week=0)   # before the season: no matchups, so no metrics row for any team
+        lg = League(i["pull"], i["players"], i["state"])
+        g = grade(lg, Values.from_csv(i["values_csv"], lg.fmt["superflex"]), 3, i["benchmark"], lg.bundle())
+        self.assertIsNone(g["row"])
+        self.assertEqual(g["pct"], {})
+        self.assertIn(g["mode"], {"contend", "retool", "rebuild"})
 
 
 if __name__ == "__main__":
