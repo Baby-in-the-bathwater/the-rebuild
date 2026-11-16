@@ -1,6 +1,8 @@
 import { expect, test } from "vitest";
-import { createEngine, type WorkerLike } from "./client";
-import { handle, type EngineRequest } from "./protocol";
+import { createEngine, EngineError, type WorkerLike } from "./client";
+import { createHandler, type EngineRequest, type Runner } from "./protocol";
+import type { Report } from "./python";
+import { ReportError } from "../report/run";
 
 type Listener = (e: any) => void;
 
@@ -9,14 +11,44 @@ interface FakeWorker extends WorkerLike {
   flush(order?: "reverse"): void;
 }
 
-// Answers through protocol.handle. With `silent`, nothing is answered until
+const report = (team: string): Report => ({ league_id: "L1", roster_id: 3, summary: { team }, board_data: {}, brief: team });
+
+// A runner that reports "<team>: start", then waits until release(team) before "<team>: done" and its report.
+// Team "bad" fails with a team error.
+function gatedRunner() {
+  const gates = new Map<string, () => void>();
+  const run: Runner = async (req, onProgress) => {
+    onProgress(`${req.team}: start`);
+    await new Promise<void>((resolve) => gates.set(req.team, resolve));
+    onProgress(`${req.team}: done`);
+    if (req.team === "bad") throw new ReportError("team", "No team matches 'bad'");
+    return report(req.team);
+  };
+  const release = async (team: string) => {
+    for (let i = 0; i < 10 && !gates.has(team); i++) await Promise.resolve();
+    gates.get(team)!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  return { run, release };
+}
+
+const instant: Runner = async (req, onProgress) => {
+  onProgress("pulling league");
+  onProgress("grading");
+  if (req.team === "bad") throw new ReportError("team", "No team matches 'bad'");
+  return report(req.team);
+};
+
+// Answers through protocol.createHandler. With `silent`, nothing is answered until
 // flush() is called; failures can be injected with fail().
-function fakeWorker(opts: { silent?: boolean } = {}): FakeWorker {
+function fakeWorker(opts: { silent?: boolean; run?: Runner } = {}): FakeWorker {
   const listeners: Record<string, Listener[]> = { message: [], error: [] };
   const queued: EngineRequest[] = [];
-  const reply = (req: EngineRequest) => {
-    for (const l of listeners.message!) l({ data: handle(req) });
-  };
+  const handler = createHandler(opts.run ?? instant);
+  const reply = (req: EngineRequest) =>
+    void handler(req, (res) => {
+      for (const l of listeners.message!) l({ data: res });
+    });
   return {
     postMessage(msg) {
       if (opts.silent) queued.push(msg as EngineRequest);
@@ -53,11 +85,45 @@ test("replies are matched to requests by id", async () => {
   expect(order).toEqual(["second", "first"]);
 });
 
+test("a report resolves with the report and forwards progress in order", async () => {
+  const lines: string[] = [];
+  const got = await createEngine(fakeWorker()).report({ leagueId: "L1", team: "Team 3" }, (l) => lines.push(l));
+  expect(got).toEqual(report("Team 3"));
+  expect(lines).toEqual(["pulling league", "grading"]);
+});
+
+test("a report error rejects with its message and carries the kind", async () => {
+  const p = createEngine(fakeWorker()).report({ leagueId: "L1", team: "bad" }, () => {});
+  await expect(p).rejects.toBeInstanceOf(EngineError);
+  await expect(p).rejects.toMatchObject({ message: "No team matches 'bad'", kind: "team" });
+});
+
+test("two concurrent reports are kept apart by id", async () => {
+  const gated = gatedRunner();
+  const engine = createEngine(fakeWorker({ run: gated.run }));
+  const linesA: string[] = [];
+  const linesB: string[] = [];
+  const a = engine.report({ leagueId: "L1", team: "A" }, (l) => linesA.push(l));
+  const b = engine.report({ leagueId: "L1", team: "bad" }, (l) => linesB.push(l));
+  const settled = Promise.allSettled([a, b]);
+  await gated.release("bad");
+  await gated.release("A");
+  const [ra, rb] = await settled;
+  expect(ra).toEqual({ status: "fulfilled", value: report("A") });
+  expect(rb.status).toBe("rejected");
+  if (rb.status === "rejected") expect(rb.reason).toMatchObject({ kind: "team" });
+  expect(linesA).toEqual(["A: start", "A: done"]);
+  expect(linesB).toEqual(["bad: start", "bad: done"]);
+});
+
 test("a worker error rejects pending calls", async () => {
   const w = fakeWorker({ silent: true });
-  const p = createEngine(w).ping();
+  const engine = createEngine(w);
+  const p = engine.ping();
+  const r = engine.report({ leagueId: "L1", team: "x" }, () => {});
   w.fail("boom");
   await expect(p).rejects.toThrow("boom");
+  await expect(r).rejects.toThrow("boom");
 });
 
 test("an error reply rejects the pending call with its message", async () => {
