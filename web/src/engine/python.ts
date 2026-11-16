@@ -2,9 +2,9 @@
 // League data crosses into Python as the exact text of each response, through `lookup`; results come back as JSON text.
 import { loadPyodide, version } from "pyodide";
 
-/** The exact text of one response by its key (a Sleeper path, `players`, `values_csv`, `snapshot_index`,
- * `snapshot/<sha>`), or undefined if there is none. See rebuild/web_api.py. */
-export type Lookup = (key: string) => string | undefined;
+/** The exact text of one successful response by its key (a Sleeper path, `players`, `values_csv`, `snapshot_index`,
+ * `snapshot/<sha>`), or null/undefined if there is none. Never an empty or error body. See rebuild/web_api.py. */
+export type Lookup = (key: string) => string | null | undefined;
 export type Plan =
   | { found: false }
   | {
@@ -51,15 +51,20 @@ sys.path.insert(0, "/engine")
 from rebuild import web_api
 web_api.BENCHMARK_DIR = "/engine/benchmarks"
 `);
+  // PyProxies for the module, its two entry points and sys.modules, taken once and kept for the engine's lifetime.
   const api = pyodide.pyimport("rebuild.web_api");
+  const pyPlan = api.plan;
+  const pyBuild = api.build;
   const sysModules = pyodide.pyimport("sys").modules;
 
-  // Python receives the functions as JsProxies it releases after the call; a key arrives as a JS string and the
-  // returned text as a Python str, and undefined arrives as None. No PyProxy is created, so none needs destroying.
+  // Per call, Python receives the lookup and log as JsProxies it releases when the call returns; keys and log lines
+  // arrive as JS strings, the returned text as a Python str. JavaScript undefined arrives as None but null arrives
+  // as Pyodide's jsnull, so the lookup is wrapped to answer undefined for both.
+  const missingAsUndefined = (lookup: Lookup) => (key: string) => lookup(key) ?? undefined;
   return {
-    plan: (lookup, leagueId) => JSON.parse(api.plan(lookup, leagueId) as string) as Plan,
+    plan: (lookup, leagueId) => JSON.parse(pyPlan(missingAsUndefined(lookup), leagueId) as string) as Plan,
     build: (lookup, leagueId, team, runAt, log) =>
-      JSON.parse(api.build(lookup, leagueId, team, runAt, log) as string) as BuildResult,
+      JSON.parse(pyBuild(missingAsUndefined(lookup), leagueId, team, runAt, log) as string) as BuildResult,
     loadedModules: () => {
       const keys = sysModules.keys();
       try {

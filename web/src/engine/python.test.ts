@@ -91,6 +91,36 @@ describe("the engine under Pyodide", () => {
     expect(skipped).toContain("trade history skipped: no snapshot index");
   });
 
+  it("treats a lookup answering null as a missing response", () => {
+    const nulls = (key: string) => (key === "snapshot_index" ? null : lookup(key));
+    const skipped: string[] = [];
+    const out = engine.build(nulls, meta.league_id, meta.team, meta.run_at, (l) => skipped.push(l));
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.report.board_data.trade_history).toBeNull();
+    expect(skipped).toContain("trade history skipped: no snapshot index");
+  });
+
+  it("reports a lookup or log that throws as an engine error, and stays usable", () => {
+    const throwing = (key: string) => {
+      if (key === "values_csv") throw new Error("lookup broke");
+      return lookup(key);
+    };
+    const badLookup = engine.build(throwing, meta.league_id, meta.team, meta.run_at, () => {});
+    expect(badLookup.ok).toBe(false);
+    if (!badLookup.ok) expect(badLookup).toMatchObject({ kind: "engine", message: expect.stringContaining("lookup broke") });
+
+    const badLog = engine.build(lookup, meta.league_id, meta.team, meta.run_at, () => {
+      throw new Error("log broke");
+    });
+    expect(badLog.ok).toBe(false);
+    if (!badLog.ok) expect(badLog).toMatchObject({ kind: "engine", message: expect.stringContaining("log broke") });
+
+    const after = engine.build(lookup, meta.league_id, meta.team, meta.run_at, () => {});
+    expect(after.ok).toBe(true);
+    if (after.ok) expect(after.report.brief).toBe(expected("brief.md"));
+  });
+
   it("never loads numpy or requests", () => {
     const loaded = engine.loadedModules();
     expect(loaded).toContain("rebuild.web_api");

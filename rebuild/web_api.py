@@ -1,6 +1,8 @@
 """What the browser calls: the page hands over the exact text of each response, Python does the rest.
 
-`lookup(key)` returns one response's text, or None if there is none. Keys are the Sleeper paths `rebuild/sleeper.py`
+`lookup(key)` returns the exact text of one successful response, or None if there is none: a key is either the body
+of a response that succeeded or absent, never an empty or error body (the page leaves out what it could not fetch,
+and Python then behaves as the CLI does when that fetch fails). Keys are the Sleeper paths `rebuild/sleeper.py`
 requests (`state/nfl`, `league/<id>`, `league/<id>/matchups/<week>`, `draft/<id>/picks`, ...), plus `players` (the
 player table), `values_csv`, `snapshot_index` (`[[iso date, sha], ...]`) and `snapshot/<sha>` (one historical CSV).
 The inputs are assembled with the CLI's own code, so the engine sees what the CLI would have seen. `plan` says what the
@@ -118,7 +120,7 @@ def _inputs(api, league_id, run_at, log):
     values_csv = api.text("values_csv")
     if values_csv is None:   # the CLI stops when this fetch fails; an empty feed would price every asset at 0
         raise ValueError("no values feed")
-    bm =bmod.find_shipped(BENCHMARK_DIR, league.fmt) if BENCHMARK_DIR else None
+    bm = bmod.find_shipped(BENCHMARK_DIR, league.fmt) if BENCHMARK_DIR else None
     if bm:
         bm = {k: v for k, v in bm.items() if k != "_path"}
         note = f" (shipped benchmark built {bm['built']}; run with --pool to crawl a fresh one)"
