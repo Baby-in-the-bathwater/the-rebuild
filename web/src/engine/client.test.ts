@@ -59,3 +59,24 @@ test("a worker error rejects pending calls", async () => {
   w.fail("boom");
   await expect(p).rejects.toThrow("boom");
 });
+
+test("an error reply rejects the pending call with its message", async () => {
+  const listeners: Listener[] = [];
+  const posted: EngineRequest[] = [];
+  const worker: WorkerLike = {
+    postMessage: (msg) => void posted.push(msg as EngineRequest),
+    addEventListener: (type, l) => {
+      if (type === "message") listeners.push(l);
+    },
+  };
+  const p = createEngine(worker).ping();
+  for (const l of listeners) l({ data: { id: posted[0]!.id, type: "error", message: "nope" } });
+  await expect(p).rejects.toThrow("nope");
+});
+
+test("a worker error with an empty message rejects with a fallback", async () => {
+  const w = fakeWorker({ silent: true });
+  const p = createEngine(w).ping();
+  w.fail("");
+  await expect(p).rejects.toThrow("worker error");
+});

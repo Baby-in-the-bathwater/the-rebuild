@@ -21,7 +21,7 @@ export function createEngine(worker: WorkerLike): { ping(): Promise<string> } {
   });
 
   worker.addEventListener("error", (e) => {
-    const err = new Error(e?.message ?? "worker error");
+    const err = new Error(e?.message || "worker error");
     for (const entry of pending.values()) entry.reject(err);
     pending.clear();
   });

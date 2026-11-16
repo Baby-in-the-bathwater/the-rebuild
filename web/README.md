@@ -21,7 +21,7 @@ Install with `pnpm install --frozen-lockfile`. The esbuild and Wrangler's worker
 
 - `src/engine/`: the worker protocol, the worker itself and the client that talks to it. No DOM code.
 - `src/ui/`: the page code that runs on the main thread.
-- `src/data/`: static public data files the site loads.
+- `src/data/`: TypeScript that fetches data (from Sleeper and other sources) and caches it in the browser. Static files the site fetches at runtime go in `public/`, because Vite does not ship files under `src/` unless they are imported.
 
 ## Deploying
 
