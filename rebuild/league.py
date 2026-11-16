@@ -25,6 +25,26 @@ def current_week(lg, state):
     return 0
 
 
+def league_pull(api, league_id, state):
+    """The target league exactly as Sleeper returns it, or None if Sleeper has no such league. Matchups are raw for
+    weeks 1..current week, transactions raw for weeks 1..18; `League` does the filtering."""
+    lid = str(league_id)
+    lg = api.league(lid)
+    if not lg:
+        return None
+    rosters = api.rosters(lid)
+    users = api.users(lid)
+    traded = api.traded_picks(lid)
+    week = current_week(lg, state)
+    matchups = {str(wk): api.matchups(lid, wk) for wk in range(1, week + 1)}
+    transactions = {str(wk): api.transactions(lid, wk) for wk in range(1, 19)}
+    bracket = api.winners_bracket(lid)
+    drafts = api.drafts(lid)
+    return {"league": lg, "rosters": rosters, "users": users, "traded_picks": traded, "matchups": matchups,
+            "transactions": transactions, "winners_bracket": bracket, "drafts": drafts,
+            "picks": {d["draft_id"]: api.draft_picks(d["draft_id"]) for d in drafts}}
+
+
 def fmt_of(lg):
     """Format fingerprint of a league. The pooled benchmark is built from leagues sharing this family."""
     s = lg.get("settings") or {}

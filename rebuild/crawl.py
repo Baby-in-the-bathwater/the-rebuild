@@ -44,6 +44,16 @@ def fetch_season(api, cache_dir, lid, lg=None, state_week=None, state_season=Non
         # in-season bundle: reuse unless the week moved on
         if state_week and str(lg_e.get("season")) == str(state_season) and existing.get("through_week", 0) >= min(state_week, 18) - 1:
             return existing
+    b = season_bundle(api, lid, lg=lg, state_week=state_week, state_season=state_season)
+    if not b:
+        return None
+    with open(bundle_path(cache_dir, lid), "w", encoding="utf-8") as f:
+        json.dump(b, f)
+    return b
+
+
+def season_bundle(api, lid, lg=None, state_week=None, state_season=None):
+    """One league-season as `fetch_season` caches it, or None if Sleeper has no such league. No disk."""
     lg = lg or api.league(lid)
     if not lg:
         return None
@@ -63,7 +73,7 @@ def fetch_season(api, cache_dir, lid, lg=None, state_week=None, state_season=Non
     for wk in range(1, 19):
         trades.extend([t for t in api.transactions(lid, wk) if t.get("type") == "trade" and t.get("status") == "complete"])
     drafts = api.drafts(lid)
-    b = {
+    return {
         "league": lg,
         "users": api.users(lid),
         "rosters": api.rosters(lid),
@@ -76,9 +86,6 @@ def fetch_season(api, cache_dir, lid, lg=None, state_week=None, state_season=Non
         "through_week": last_wk,
         "fetched": time.strftime("%Y-%m-%d"),
     }
-    with open(bundle_path(cache_dir, lid), "w", encoding="utf-8") as f:
-        json.dump(b, f)
-    return b
 
 
 def walk_lineage(api, cache_dir, root, state_week=None, state_season=None, max_seasons=12):
