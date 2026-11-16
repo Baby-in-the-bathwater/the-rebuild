@@ -8,8 +8,8 @@ table is about 10 MB; the engine reads a dozen fields).
 snapshot_index.json: [[iso date, sha], ...] oldest first, the same data rebuild.fetch.snapshot_index returns. GITHUB_TOKEN
 is used when set (the Actions runner's shared address hits the anonymous limit often).
 
-If anything fails, or the new player table has fewer than 80% of the players already in the output folder, the existing
-files are left alone and the exit code is 1. Standard library only: the deploy job needs no pip install."""
+If anything fails, or the new player table has fewer than MIN_PLAYERS players, or fewer than 80% of the players already
+in the output folder, the existing files are left alone (or none are written) and the exit code is 1. Standard library only: the deploy job needs no pip install."""
 import argparse
 import json
 import os
@@ -21,6 +21,7 @@ PLAYERS_URL = "https://api.sleeper.app/v1/players/nfl"
 COMMITS_URL = "https://api.github.com/repos/dynastyprocess/data/commits"   # as rebuild/fetch.py
 USER_AGENT = "the-rebuild/1.0 (+https://github.com/Baby-in-the-bathwater/the-rebuild)"   # as rebuild/sleeper.py
 KEEP_RATIO = 0.8
+MIN_PLAYERS = 5000   # Sleeper's table has well over 10,000; a fresh build (CI has no old file) still needs a floor
 
 # Derived by searching the modules the browser loads (the files web/scripts/build_engine.py zips) for reads of a player
 # record: league.pdb / League.player(), and the `pdb.get(pid)` reads in metrics, trade_history and grade. Re-derive it when
@@ -119,6 +120,8 @@ def build(out_dir, players_from=None, index_from=None):
         raise
     except Exception as e:   # network, JSON, file: one failure kind for the caller
         raise DataError(f"download failed: {type(e).__name__}: {e}") from e
+    if len(players) < MIN_PLAYERS:
+        raise DataError(f"the new player table has {len(players)} players, under the floor of {MIN_PLAYERS}: writing nothing")
     old = _existing(players_path)
     if isinstance(old, dict) and len(players) < KEEP_RATIO * len(old):
         raise DataError(f"the new player table has {len(players)} players against {len(old)} in {players_path}: "

@@ -39,6 +39,9 @@ class BuildDataTest(unittest.TestCase):
                                         "search_rank": i, "depth_chart_order": 1, "team": "ALP"} for i in range(10)}
         write(self.players_src, self.players)
         write(self.index_src, [["2024-02-01T00:00:00Z", "bbb"], ["2023-01-01T00:00:00Z", "aaa"]])
+        # the tables here are tiny: lower the absolute floor for every test but the ones about it
+        self.addCleanup(setattr, build_data, "MIN_PLAYERS", build_data.MIN_PLAYERS)
+        build_data.MIN_PLAYERS = 1
 
     def run_main(self):
         argv = ["--out", self.out, "--index-from", self.index_src, "--players-from", self.players_src]
@@ -83,6 +86,21 @@ class BuildDataTest(unittest.TestCase):
         write(self.players_src, dict(list(self.players.items())[:8]))   # exactly 80% is accepted
         self.assertEqual(self.run_main()[0], 0)
         self.assertEqual(len(json.loads(read_text(path))), 8)
+
+    def test_the_floor_is_5000_players(self):
+        fresh = importlib.util.module_from_spec(spec)   # a clean copy: setUp lowered the floor on the shared one
+        spec.loader.exec_module(fresh)
+        self.assertEqual(fresh.MIN_PLAYERS, 5000)
+
+    def test_a_table_under_the_floor_writes_nothing_and_exits_1(self):
+        build_data.MIN_PLAYERS = 11   # one more than the table has, and no old file to compare with
+        code, err = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("the new player table has 10 players, under the floor of 11", err)
+        self.assertFalse(os.path.exists(os.path.join(self.out, "players.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.out, "snapshot_index.json")))
+        build_data.MIN_PLAYERS = 10   # exactly the floor is accepted
+        self.assertEqual(self.run_main()[0], 0)
 
     def test_a_failed_download_with_no_old_file_exits_1(self):
         os.remove(self.players_src)
