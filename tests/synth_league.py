@@ -266,7 +266,7 @@ def make_inputs(*, week=6, history=True, trades=True):
             "transactions": transactions, "winners_bracket": [], "drafts": [d1], "picks": {"D1": d1_picks}}
 
     # the previous season, complete: the same managers, last year's draft, 14 weeks and a four-team bracket
-    chain, hist = ["L1"], []
+    chain, hist = ["L1"], {}
     if history:
         old = {pid: p for pid, p in skill.items() if p["cls"] != "2026"}
         prev_comp = {rid: [p for p in pids if p in old or p.isalpha()] for rid, pids in comp0.items()}
@@ -283,8 +283,8 @@ def make_inputs(*, week=6, history=True, trades=True):
         prev_rosters = [{"roster_id": rid, "owner_id": f"U{rid}", "league_id": "L0", "players": sorted(prev_comp[rid]), "starters": [], "reserve": [],
                          "taxi": [], "settings": s0[rid], "metadata": {}} for rid in range(1, N + 1)]
         chain.append("L0")
-        hist.append({"league": prev_league, "users": users, "rosters": prev_rosters, "matchups": m0, "winners_bracket": bracket, "drafts": [d0],
-                     "picks": {"D0": d0_picks}, "traded_picks": [], "trades": [], "through_week": REG_WEEKS, "fetched": "2026-11-16"})
+        hist["L0"] = {"league": prev_league, "users": users, "rosters": prev_rosters, "matchups": m0, "winners_bracket": bracket, "drafts": [d0],
+                     "picks": {"D0": d0_picks}, "traded_picks": [], "trades": [], "through_week": REG_WEEKS, "fetched": "2026-11-16"}
 
     # the values feed now, and one snapshot from before the trades
     index, snaps = [], {}
@@ -311,7 +311,7 @@ class FakeSleeper:
         self.calls = 0
         pull = inputs["pull"]
         self._seasons = {pull["league"]["league_id"]: pull}
-        self._seasons.update({b["league"]["league_id"]: b for b in inputs["history"]})
+        self._seasons.update(inputs["history"])
         self._picks = {did: picks for s in self._seasons.values() for did, picks in (s.get("picks") or {}).items()}
 
     def _season(self, lid):

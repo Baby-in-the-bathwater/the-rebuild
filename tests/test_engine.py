@@ -12,6 +12,7 @@ class SynthTest(unittest.TestCase):
         self.assertIsNone(re.search(r"(?<![\d.])\d{17,20}(?![\d.])", json.dumps(a)))
         self.assertEqual(a["version"], 1)
         self.assertEqual(a["chain"][0], a["pull"]["league"]["league_id"])
+        self.assertEqual(set(a["history"]), set(a["chain"][1:]))
 
 
 if __name__ == "__main__":
