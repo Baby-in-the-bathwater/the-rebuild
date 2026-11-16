@@ -1,11 +1,14 @@
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
-from rebuild import fetch, trade_history
+from rebuild import cli, engine, fetch, trade_history
 from rebuild.grade import grade
 from rebuild.league import League
 from rebuild.values import Values
@@ -57,6 +60,19 @@ class PureEngineTest(unittest.TestCase):
         for x, y in zip(a["trades"], b["trades"]):
             self.assertEqual(y["days_ago"] - x["days_ago"], 10)
 
+    def test_trade_history_with_no_completed_trades(self):
+        i = synth_league.make_inputs(trades=False)
+        lg = League(i["pull"], i["players"], i["state"])
+        bundles = {**i["history"], lg.id: lg.bundle()}
+        self.assertEqual(trade_history.needed_snapshots(bundles, [["2026-09-01T00:00:00Z", "5a1c0de"]]), {})
+        now = dt.datetime(2026, 11, 16, 12, tzinfo=dt.timezone.utc)
+        self.assertIsNone(trade_history.build(bundles, lg, Values.from_csv(i["values_csv"], lg.fmt["superflex"]), [], {}, now,
+                                              log=lambda s: None))
+
+    def test_fetch_pull_of_a_missing_league(self):
+        i = synth_league.make_inputs()
+        self.assertIsNone(fetch.league_pull(synth_league.FakeSleeper(i), "L404", i["state"]))
+
 
 class GradeTest(unittest.TestCase):
     def test_grade_a_team_with_no_metrics_row(self):
@@ -66,6 +82,84 @@ class GradeTest(unittest.TestCase):
         self.assertIsNone(g["row"])
         self.assertEqual(g["pct"], {})
         self.assertIn(g["mode"], {"contend", "retool", "rebuild"})
+
+
+QUIET = lambda s: None  # noqa: E731
+
+
+class BuildReportTest(unittest.TestCase):
+    def test_same_inputs_give_the_same_report(self):
+        a = engine.build_report(synth_league.make_inputs(), "Team 3", log=QUIET)
+        b = engine.build_report(synth_league.make_inputs(), "Team 3", log=QUIET)
+        self.assertEqual(json.dumps(a), json.dumps(b))
+        self.assertEqual(set(a), {"league_id", "roster_id", "summary", "board_data", "brief"})
+        self.assertNotIn("api_calls", a["summary"])
+        self.assertIn(a["summary"]["mode"], {"contend", "retool", "rebuild"})
+
+    def test_stages_are_filled_and_serialisable(self):
+        stages = {}
+        engine.build_report(synth_league.make_inputs(), "Team 3", log=QUIET, stages=stages)
+        self.assertEqual(set(stages), {"league", "assets", "grade", "ledger", "deals", "three_team_deals", "trade_history"})
+        json.dumps(stages)
+
+    def test_no_trades_and_no_snapshot_index(self):
+        r = engine.build_report(synth_league.make_inputs(trades=False), "Team 3", log=QUIET)
+        self.assertIsNone(r["board_data"]["trade_history"])
+        i = synth_league.make_inputs()
+        i["snapshot_index"] = None
+        self.assertIsNone(engine.build_report(i, "Team 3", log=QUIET)["board_data"]["trade_history"])
+
+    def test_preseason_league(self):
+        r = engine.build_report(synth_league.make_inputs(week=0), "Team 3", log=QUIET)
+        self.assertEqual(r["summary"]["week"], 0)
+
+    def test_wrong_version_is_refused(self):
+        i = synth_league.make_inputs()
+        i["version"] = 99
+        with self.assertRaisesRegex(ValueError, "version 99"):
+            engine.build_report(i, "Team 3")
+
+    def test_engine_imports_without_requests_or_numpy(self):
+        code = "import sys; import rebuild.engine; assert 'requests' not in sys.modules and 'numpy' not in sys.modules"
+        self.assertEqual(subprocess.run([sys.executable, "-c", code]).returncode, 0)
+
+
+class GatherTest(unittest.TestCase):
+    def gather(self, i, tmp, *extra, index=None):
+        args = cli.parse_args(["--league", i["chain"][0], "--team", "Team 3", "--cache-dir", os.path.join(tmp, "cache"),
+                               "--out", os.path.join(tmp, "out"), *extra])
+        with mock.patch.object(fetch, "values_csv", lambda *a, **k: i["values_csv"]), \
+                mock.patch.object(fetch, "snapshot_index", index or (lambda *a, **k: i["snapshot_index"])), \
+                mock.patch.object(fetch, "snapshot_csv", lambda cache_dir, sha: i["snapshots"][sha]):
+            lines = []
+            return cli.gather(synth_league.FakeSleeper(i), args, lines.append), lines
+
+    def test_gathered_inputs_give_the_report_the_inputs_give(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            g, _ = self.gather(i, tmp)
+        self.assertEqual(set(g), set(i))
+        for k in ("version", "options", "state", "players", "pull", "chain", "values_csv", "snapshot_index", "snapshots", "benchmark_note"):
+            self.assertEqual(g[k], i[k], k)
+        self.assertEqual({k: v for k, v in g["benchmark"].items() if k != "_path"}, i["benchmark"])   # find_shipped notes where it found it
+        self.assertEqual(set(g["history"]), set(i["history"]))
+        g["run_at"] = i["run_at"]
+        self.assertEqual(json.dumps(engine.build_report(g, "Team 3", log=QUIET)), json.dumps(engine.build_report(i, "Team 3", log=QUIET)))
+
+    def test_no_history_gathers_only_the_current_league(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            g, _ = self.gather(i, tmp, "--no-history")
+        self.assertEqual((g["chain"], g["history"], g["options"]["history"]), ([i["chain"][0]], {}, False))
+
+    def test_snapshot_index_failure_skips_trade_history(self):
+        def down(*a, **k):
+            raise OSError("rate limited")
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            g, lines = self.gather(i, tmp, index=down)
+        self.assertIsNone(g["snapshot_index"])
+        self.assertIn("trade history skipped: rate limited", lines)
 
 
 if __name__ == "__main__":
