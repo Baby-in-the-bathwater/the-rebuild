@@ -1,0 +1,81 @@
+/* The site's own pages (the form, the board's progress and error screens), its fixed controls over the board and the
+   notices above it.
+   Every selector is scoped to a site-* class, and every token is named --site-*, so nothing here reaches the board's
+   markup or overrides the board's own CSS. Colours and fonts are the board's (rebuild/templates/board.css). */
+.site-page, .site-controls, .site-notices {
+  --site-bg:#0f1420; --site-panel:#171d2c; --site-line:#2a3245; --site-fg:#e8ecf4; --site-muted:#8e98ad;
+  --site-accent:#f5c542; --site-on-accent:#1a1400; --site-bad:#ff6b6b; --site-good:#4cd97b;
+  --site-display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;
+  --site-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light) {
+  .site-page, .site-controls, .site-notices {
+    --site-bg:#f3f4f8; --site-panel:#ffffff; --site-line:#d8dce6; --site-fg:#141a28; --site-muted:#5d6678;
+    --site-accent:#b8860b; --site-on-accent:#ffffff; --site-bad:#c93b3b; --site-good:#1f8a4c;
+    color-scheme:light;
+  }
+}
+
+body.site-page {
+  margin:0; min-height:100vh; background:var(--site-bg); color:var(--site-fg);
+  font:15px/1.45 var(--site-body); padding:0 16px 48px;
+}
+.site-page *, .site-controls * { box-sizing:border-box }
+.site-main { max-width:520px; margin:0 auto; padding-top:clamp(28px, 8vh, 72px) }
+.site-title {
+  font:700 clamp(34px, 9vw, 48px)/0.95 var(--site-display); letter-spacing:.01em; text-transform:uppercase; margin:0 0 12px;
+}
+.site-lede { color:var(--site-muted); margin:0 0 24px }
+.site-note { color:var(--site-muted); font-size:13px; margin-top:24px }
+.site-page a { color:var(--site-accent) }
+
+.site-form { display:grid; gap:18px; padding:20px; background:var(--site-panel); border:1px solid var(--site-line); border-radius:10px }
+.site-field { display:grid; gap:6px }
+.site-field > span { font:600 13px var(--site-body); letter-spacing:.04em; text-transform:uppercase; color:var(--site-muted) }
+.site-field small { color:var(--site-muted); font-size:13px }
+.site-field input {
+  width:100%; font:500 16px var(--site-body); color:var(--site-fg); background:var(--site-bg);
+  border:1px solid var(--site-line); border-radius:6px; padding:10px 12px;
+}
+.site-field input:focus-visible { outline:2px solid var(--site-accent); outline-offset:1px; border-color:var(--site-accent) }
+.site-field input[aria-invalid="true"] { border-color:var(--site-bad) }
+
+.site-message { margin:0; color:var(--site-bad); white-space:pre-line; overflow-wrap:anywhere }
+.site-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px }
+
+.site-btn {
+  display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:8px 16px;
+  font:600 14px var(--site-body); color:var(--site-fg); text-decoration:none; cursor:pointer;
+  background:var(--site-panel); border:1px solid var(--site-line); border-radius:999px;
+}
+.site-page a.site-btn { color:var(--site-fg) }
+.site-btn.site-primary, .site-page a.site-btn.site-primary { background:var(--site-accent); border-color:var(--site-accent); color:var(--site-on-accent) }
+.site-btn:focus-visible { outline:2px solid var(--site-accent); outline-offset:2px }
+
+.site-progress { list-style:none; margin:0; padding:0; display:grid; gap:8px; font-size:14px }
+.site-progress li { position:relative; padding-left:22px; overflow-wrap:anywhere }
+.site-progress li::before {
+  content:""; position:absolute; left:2px; top:.45em; width:9px; height:9px; border-radius:50%;
+  background:var(--site-accent); animation:site-pulse 1.1s ease-in-out infinite;
+}
+.site-progress li.site-done { color:var(--site-muted) }
+.site-progress li.site-done::before { background:var(--site-good); animation:none }
+@keyframes site-pulse { 50% { opacity:.25 } }
+@media (prefers-reduced-motion: reduce) { .site-progress li::before { animation:none } }
+
+/* Over the board: one small fixed group, bottom right, clear of the board's own layout. */
+.site-controls {
+  position:fixed; right:max(12px, env(safe-area-inset-right, 0px)); bottom:max(12px, env(safe-area-inset-bottom, 0px)); z-index:50;
+  display:flex; gap:6px; padding:6px; background:var(--site-panel); border:1px solid var(--site-line); border-radius:999px;
+  box-shadow:0 4px 18px rgba(0,0,0,.35); font-family:var(--site-body);
+}
+.site-controls .site-btn { min-height:32px; padding:4px 12px; font-size:13px; background:transparent; border-color:transparent }
+.site-controls .site-btn:hover { border-color:var(--site-line) }
+
+/* Above the board: what this report could not do as a full run would. */
+.site-notices { display:grid; gap:6px; margin:12px 0 0; font:14px/1.4 var(--site-body) }
+.site-notice {
+  margin:0; padding:8px 12px; color:var(--site-fg); background:var(--site-panel);
+  border:1px solid var(--site-line); border-left:4px solid var(--site-accent); border-radius:6px; overflow-wrap:anywhere;
+}

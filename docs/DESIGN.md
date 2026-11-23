@@ -19,8 +19,8 @@ A fifth path is the one this grew out of: run the CLI, then let a Claude session
 league id + team
    |
    v
-League.pull  -> settings, rosters, users, traded picks, weekly matchups, trades, bracket
-Values.load  -> DynastyProcess CSV (value_2qb if Superflex else value_1qb)
+fetch.league_pull -> settings, rosters, users, traded picks, weekly matchups, trades, bracket
+Values.from_csv -> DynastyProcess CSV (value_2qb if Superflex else value_1qb)
 walk_lineage -> previous_league_id chain, one bundle per season (cached forever once complete)
 benchmark    -> shipped JSON for the format family, or discover_pool + crawl_lineages + build
 grade        -> team_rows (own league) -> z within league -> percentile on the pool -> the call
@@ -98,7 +98,8 @@ Clicking any player row or pick chip forks the shown deal into a custom trade (y
 - **Lineup cost.** For each team in a trade, the board builds its best lineup from season points per game and the league's roster slots (narrowest slots first; IR and taxi players sit out, and stay out after a trade), before and after the trade, and multiplies the change in weekly points by a rate for the team's type: contend 300, retool 150, rebuild 50 per point. Those rates are placeholders with no evidence behind them yet. A team's return is `max(0, value received + lineup amount) / value sent`.
 - **Team types** come from running the grade on every team (a team that cannot be graded is retool). Each roster header has a dropdown to override one; overrides are kept until set back to the app's grade, and Reset does not clear them.
 - Roster values show the DP value beneath ("was"), the trade panel shows each team's lineup line and your pure DP return, and All deals re-prices its returns with a note naming the settings. The deal list is not rebuilt: drafted deals and their ranked order still come from DP values, and "Walk away if" numbers are marked as DP. P/V tags, League trades, `brief.md` and `summary.json` stay on DP.
-- The logic lives in `rebuild/templates/board_weights.js`, inlined into the board at render time and tested with `node --test tests/board_weights.test.js` (newer Node versions do not accept a bare folder) and `py -3 -m unittest discover tests`.
+- The trade board template is split into shared sources in `rebuild/templates/`: `board.css`, `board_body.html`, `board.js` (reads its data from `window.__BOARD_DATA__`) and `board_weights.js`, with `trade_board.html` as the shell. `board.render` inlines them into one self-contained file; the website loads the same four files.
+- The weights logic lives in `rebuild/templates/board_weights.js`, inlined into the board at render time and tested with `node --test tests/board_weights.test.js` (newer Node versions do not accept a bare folder) and `py -3 -m unittest discover tests`.
 
 ## What it does not do
 

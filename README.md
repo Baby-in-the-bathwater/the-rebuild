@@ -50,6 +50,8 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 | **GitHub Action** | no install at all | Fork the repo, Actions tab, "Run the rebuild", enter league id and team, download the artifact from the run page. |
 | **Claude session** | you want to talk it through | Run the CLI, then hand the brief and board to a Claude session for the write-up; the board publishes as a private artifact as is. |
 
+A hosted site is in progress; see [web/README.md](web/README.md). Its deploy also publishes a trimmed copy of Sleeper's player table and the values-snapshot index; on staging these are refreshed daily, on production only when it is deployed.
+
 ## Options
 
 ```
@@ -66,6 +68,8 @@ The first run of a league pulls its past seasons (about 40 seconds for five); th
 --cache-dir DIR      where pulls and crawled seasons are cached (default ./cache)
 --pdf                also render brief.pdf (needs Chrome, Chromium or Edge installed; the Action does this)
 --open               open the trade board when done
+--record DIR         after the run, save the gathered inputs to DIR (real league data: do not commit it to a public repo)
+--replay DIR         rebuild from a recording with no network; --league not needed, --team defaults to the recorded one, --out defaults to out/replay
 ```
 
 ## Benchmarks

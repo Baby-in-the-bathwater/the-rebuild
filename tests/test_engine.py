@@ -1,0 +1,443 @@
+import contextlib
+import datetime as dt
+import io
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+from rebuild import cli, engine, fetch, inputs, trade_history
+from rebuild.grade import grade, team_types
+from rebuild.league import League
+from rebuild.values import Values
+from tests import synth_league
+
+
+class SynthTest(unittest.TestCase):
+    def test_inputs_are_stable_and_public_safe(self):
+        a, b = synth_league.make_inputs(), synth_league.make_inputs()
+        self.assertEqual(json.dumps(a, sort_keys=True), json.dumps(b, sort_keys=True))
+        self.assertIsNone(re.search(r"(?<![\d.])\d{17,20}(?![\d.])", json.dumps(a)))
+        self.assertEqual(a["version"], 1)
+        self.assertEqual(a["chain"][0], a["pull"]["league"]["league_id"])
+        self.assertEqual(set(a["history"]), set(a["chain"][1:]))
+
+
+class PureEngineTest(unittest.TestCase):
+    def test_engine_modules_import_without_requests_or_numpy(self):
+        code = ("import sys; import rebuild.league, rebuild.values, rebuild.metrics, rebuild.grade, rebuild.trades, "
+                "rebuild.trade_history, rebuild.report, rebuild.board; "
+                "assert 'requests' not in sys.modules and 'numpy' not in sys.modules")
+        self.assertEqual(subprocess.run([sys.executable, "-c", code]).returncode, 0)
+
+    def test_league_builds_from_data(self):
+        i = synth_league.make_inputs()
+        lg = League(i["pull"], i["players"], i["state"])
+        self.assertEqual(lg.n, 12)
+        self.assertEqual(lg.week, 6)
+        self.assertEqual(League(synth_league.make_inputs(week=0)["pull"], i["players"], i["state"]).week, 0)
+
+    def test_fetch_pull_matches_inputs(self):
+        i = synth_league.make_inputs()
+        api = synth_league.FakeSleeper(i)
+        self.assertEqual(fetch.league_pull(api, i["chain"][0], i["state"]), i["pull"])
+
+    def test_trade_history_uses_the_given_now(self):
+        i = synth_league.make_inputs()
+        lg = League(i["pull"], i["players"], i["state"])
+        values = Values.from_csv(i["values_csv"], lg.fmt["superflex"])
+        bundles = {**i["history"], lg.id: lg.bundle()}
+        needed = trade_history.needed_snapshots(bundles, i["snapshot_index"])
+        self.assertEqual(set(needed), set(i["snapshots"]))
+        now = dt.datetime(2026, 11, 16, 12, tzinfo=dt.timezone.utc)
+        quiet = lambda s: None  # noqa: E731
+        a = trade_history.build(bundles, lg, values, i["snapshot_index"], i["snapshots"], now, log=quiet)
+        b = trade_history.build(bundles, lg, values, i["snapshot_index"], i["snapshots"], now + dt.timedelta(days=10), log=quiet)
+        self.assertEqual(len(a["trades"]), 2)
+        self.assertEqual([t["id"] for t in a["trades"]], [t["id"] for t in b["trades"]])
+        for x, y in zip(a["trades"], b["trades"]):
+            self.assertEqual(y["days_ago"] - x["days_ago"], 10)
+
+    def test_trade_history_with_no_completed_trades(self):
+        i = synth_league.make_inputs(trades=False)
+        lg = League(i["pull"], i["players"], i["state"])
+        bundles = {**i["history"], lg.id: lg.bundle()}
+        self.assertEqual(trade_history.needed_snapshots(bundles, [["2026-09-01T00:00:00Z", "5a1c0de"]]), {})
+        now = dt.datetime(2026, 11, 16, 12, tzinfo=dt.timezone.utc)
+        self.assertIsNone(trade_history.build(bundles, lg, Values.from_csv(i["values_csv"], lg.fmt["superflex"]), [], {}, now,
+                                              log=lambda s: None))
+
+    def test_fetch_pull_of_a_missing_league(self):
+        i = synth_league.make_inputs()
+        self.assertIsNone(fetch.league_pull(synth_league.FakeSleeper(i), "L404", i["state"]))
+
+
+class GradeTest(unittest.TestCase):
+    def test_grade_a_team_with_no_metrics_row(self):
+        i = synth_league.make_inputs(week=0)   # before the season: no matchups, so no metrics row for any team
+        lg = League(i["pull"], i["players"], i["state"])
+        g = grade(lg, Values.from_csv(i["values_csv"], lg.fmt["superflex"]), 3, i["benchmark"], lg.bundle())
+        self.assertIsNone(g["row"])
+        self.assertEqual(g["pct"], {})
+        self.assertIn(g["mode"], {"contend", "retool", "rebuild"})
+
+    def test_team_types_calls_a_team_with_no_metrics_row_retool(self):
+        i = synth_league.make_inputs()
+        lg = League(i["pull"], i["players"], i["state"])
+        values = Values.from_csv(i["values_csv"], lg.fmt["superflex"])
+        bundle = lg.bundle()
+        bundle["matchups"] = {wk: [m for m in ms if m["roster_id"] != 4] for wk, ms in bundle["matchups"].items()}
+        self.assertIsNone(grade(lg, values, 4, i["benchmark"], bundle)["row"])
+        self.assertIsNotNone(grade(lg, values, 6, i["benchmark"], bundle)["row"])
+        types = team_types(lg, values, i["benchmark"], bundle)
+        self.assertEqual(types[4], "retool")   # graded on its own it would be a contender
+        self.assertEqual(types[6], "contend")
+        self.assertEqual(set(types), set(lg.team_name))
+
+
+class InputsFolderTest(unittest.TestCase):
+    def test_round_trip(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(i, d, "Team 3")
+            loaded, team = inputs.load(d)
+        self.assertEqual(team, "Team 3")
+        self.assertEqual(json.dumps(loaded, sort_keys=True), json.dumps(i, sort_keys=True))
+
+    def test_missing_file_and_wrong_version(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(i, d, "Team 3")
+            os.remove(os.path.join(d, "players.json"))
+            with self.assertRaisesRegex(ValueError, "is missing players.json"):
+                inputs.load(d)
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(dict(i, version=2), d, "Team 3")
+            with self.assertRaisesRegex(ValueError, "is version 2, expected 1"):
+                inputs.load(d)
+
+    def test_unsafe_names_are_refused_before_anything_is_written(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            folder = os.path.join(d, "rec")
+            with self.assertRaisesRegex(ValueError, r'cannot record league "\.\./evil": not a safe file name'):
+                inputs.save(dict(i, history={"../evil": {}}), folder, "Team 3")
+            with self.assertRaisesRegex(ValueError, r'cannot record snapshot "a/b": not a safe file name'):
+                inputs.save(dict(i, snapshots={"a/b": "x"}), folder, "Team 3")
+            self.assertEqual(os.listdir(d), [])
+
+    def test_saving_again_replaces_the_old_recording(self):
+        i = synth_league.make_inputs()
+        two = dict(i, history={"L0": {"a": 1}, "L9": {"b": 2}}, snapshots={"aaa": "x", "bbb": "y"})
+        one = dict(i, history={"L0": {"a": 1}}, snapshots={"aaa": "x"})
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(two, d, "Team 3")
+            open(os.path.join(d, "notes.txt"), "w").close()
+            inputs.save(one, d, "Team 3")
+            loaded, _ = inputs.load(d)
+            self.assertEqual(set(loaded["history"]), {"L0"})
+            self.assertEqual(set(loaded["snapshots"]), {"aaa"})
+            self.assertTrue(os.path.exists(os.path.join(d, "notes.txt")))
+
+    def test_missing_listed_history_or_snapshot_file_is_noticed(self):
+        i = dict(synth_league.make_inputs(), snapshots={"aaa": "x", "bbb": "y"})
+        for rel, msg in ((os.path.join("history", f"{sorted(i['history'])[0]}.json"), "history/%s.json"), (os.path.join("snapshots", "bbb.csv"), "snapshots/bbb.csv")):
+            with tempfile.TemporaryDirectory() as d:
+                inputs.save(i, d, "Team 3")
+                os.remove(os.path.join(d, rel))
+                with self.assertRaisesRegex(ValueError, "replay folder .* is missing " + (msg % sorted(i["history"])[0] if "%s" in msg else msg).replace(".", r"\.")):
+                    inputs.load(d)
+
+    def test_unlisted_files_are_ignored_and_listing_is_required(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(i, d, "Team 3")
+            os.makedirs(os.path.join(d, "snapshots"), exist_ok=True)
+            open(os.path.join(d, "snapshots", "zzz.csv"), "w").close()
+            loaded, _ = inputs.load(d)
+            self.assertNotIn("zzz", loaded["snapshots"])
+            with open(os.path.join(d, "meta.json"), encoding="utf-8") as f:
+                meta = json.load(f)
+            del meta["snapshot_shas"]
+            with open(os.path.join(d, "meta.json"), "w", encoding="utf-8") as f:
+                json.dump(meta, f)
+            with self.assertRaisesRegex(ValueError, "has a bad meta.json"):
+                inputs.load(d)
+
+    def test_structurally_wrong_files_name_the_file(self):
+        i = synth_league.make_inputs()
+        for name, content in (("players.json", "{not json"), ("pull.json", "[]"), ("pull.json", '{"x": 1}')):
+            with tempfile.TemporaryDirectory() as d:
+                inputs.save(i, d, "Team 3")
+                with open(os.path.join(d, name), "w") as f:
+                    f.write(content)
+                with self.assertRaisesRegex(ValueError, "replay folder .* has a bad " + name.replace(".", r"\.")):
+                    inputs.load(d)
+
+    def test_saving_leaves_files_in_a_folder_that_is_not_a_recording(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "history"))
+            keep = os.path.join(d, "history", "mine.json")
+            open(keep, "w").close()
+            inputs.save(i, d, "Team 3")
+            self.assertTrue(os.path.exists(keep))
+
+    def test_bad_meta_json(self):
+        i = synth_league.make_inputs()
+        for bad in ("[]", '{"version": 1}'):
+            with tempfile.TemporaryDirectory() as d:
+                inputs.save(i, d, "Team 3")
+                with open(os.path.join(d, "meta.json"), "w") as f:
+                    f.write(bad)
+                with self.assertRaisesRegex(ValueError, "has a bad meta.json"):
+                    inputs.load(d)
+
+    def test_round_trip_edges(self):
+        i = synth_league.make_inputs()
+        empty = dict(i, benchmark=None, snapshot_index=None, history={}, snapshots={})
+        crlf = dict(i, snapshots={"abc123": "date,x\r\n1,2\r\n"})
+        for case in (empty, crlf):
+            with tempfile.TemporaryDirectory() as d:
+                inputs.save(case, d, "Team 3")
+                loaded, _ = inputs.load(d)
+            self.assertEqual(json.dumps(loaded, sort_keys=True), json.dumps(case, sort_keys=True))
+        self.assertEqual(loaded["snapshots"]["abc123"], "date,x\r\n1,2\r\n")
+
+    def test_benchmark_path_is_not_recorded_and_the_input_is_not_changed(self):
+        i = synth_league.make_inputs()
+        i["benchmark"] = dict(i["benchmark"], _path="/home/someone/benchmarks/x.json")
+        with tempfile.TemporaryDirectory() as d:
+            inputs.save(i, d, "Team 3")
+            loaded, _ = inputs.load(d)
+            on_disk = ""
+            for root, _, names in os.walk(d):
+                for n in names:
+                    with open(os.path.join(root, n), encoding="utf-8") as f:
+                        on_disk += f.read()
+        self.assertNotIn("_path", loaded["benchmark"])
+        self.assertNotIn("/home/someone", on_disk)
+        self.assertEqual(i["benchmark"]["_path"], "/home/someone/benchmarks/x.json")
+        self.assertEqual({k: v for k, v in i["benchmark"].items() if k != "_path"}, loaded["benchmark"])
+        a = engine.build_report(i, "Team 3", log=QUIET)
+        b = engine.build_report(loaded, "Team 3", log=QUIET)
+        self.assertEqual(json.dumps(a), json.dumps(b))
+
+
+QUIET = lambda s: None  # noqa: E731
+
+
+class BuildReportTest(unittest.TestCase):
+    def test_same_inputs_give_the_same_report(self):
+        a = engine.build_report(synth_league.make_inputs(), "Team 3", log=QUIET)
+        b = engine.build_report(synth_league.make_inputs(), "Team 3", log=QUIET)
+        self.assertEqual(json.dumps(a), json.dumps(b))
+        self.assertEqual(set(a), {"league_id", "roster_id", "summary", "board_data", "brief"})
+        self.assertNotIn("api_calls", a["summary"])
+        self.assertIn(a["summary"]["mode"], {"contend", "retool", "rebuild"})
+
+    def test_stages_are_filled_and_serialisable(self):
+        stages = {}
+        engine.build_report(synth_league.make_inputs(), "Team 3", log=QUIET, stages=stages)
+        self.assertEqual(set(stages), {"league", "assets", "grade", "ledger", "deals", "three_team_deals", "trade_history"})
+        json.dumps(stages)
+
+    def test_no_trades_and_no_snapshot_index(self):
+        r = engine.build_report(synth_league.make_inputs(trades=False), "Team 3", log=QUIET)
+        self.assertIsNone(r["board_data"]["trade_history"])
+        i = synth_league.make_inputs()
+        i["snapshot_index"] = None
+        self.assertIsNone(engine.build_report(i, "Team 3", log=QUIET)["board_data"]["trade_history"])
+
+    def test_preseason_league(self):
+        r = engine.build_report(synth_league.make_inputs(week=0), "Team 3", log=QUIET)
+        self.assertEqual(r["summary"]["week"], 0)
+
+    def test_run_at_with_z_works_and_a_naive_one_is_refused(self):
+        i = synth_league.make_inputs()
+        z = dict(i, run_at="2026-11-16T12:00:00Z")
+        offset = dict(i, run_at="2026-11-16T12:00:00+00:00")
+        self.assertEqual(json.dumps(engine.build_report(z, "Team 3", log=QUIET)), json.dumps(engine.build_report(offset, "Team 3", log=QUIET)))
+        for bad in ("2026-01-01T00:00:00", "yesterday"):
+            with self.assertRaisesRegex(ValueError, "run_at must be an ISO timestamp with a timezone"):
+                engine.build_report(dict(i, run_at=bad), "Team 3", log=QUIET)
+
+    def test_wrong_version_is_refused(self):
+        i = synth_league.make_inputs()
+        i["version"] = 99
+        with self.assertRaisesRegex(ValueError, "version 99"):
+            engine.build_report(i, "Team 3")
+
+    def test_engine_imports_without_requests_or_numpy(self):
+        code = "import sys; import rebuild.engine; assert 'requests' not in sys.modules and 'numpy' not in sys.modules"
+        self.assertEqual(subprocess.run([sys.executable, "-c", code]).returncode, 0)
+
+
+class GatherTest(unittest.TestCase):
+    def gather(self, i, tmp, *extra, index=None):
+        args = cli.parse_args(["--league", i["chain"][0], "--team", "Team 3", "--cache-dir", os.path.join(tmp, "cache"),
+                               "--out", os.path.join(tmp, "out"), *extra])
+        with mock.patch.object(fetch, "values_csv", lambda *a, **k: i["values_csv"]), \
+                mock.patch.object(fetch, "snapshot_index", index or (lambda *a, **k: i["snapshot_index"])), \
+                mock.patch.object(fetch, "snapshot_csv", lambda cache_dir, sha: i["snapshots"][sha]):
+            lines = []
+            return cli.gather(synth_league.FakeSleeper(i), args, lines.append), lines
+
+    def test_gathered_inputs_give_the_report_the_inputs_give(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            g, _ = self.gather(i, tmp)
+        self.assertEqual(set(g), set(i))
+        for k in ("version", "options", "state", "players", "pull", "chain", "values_csv", "snapshot_index", "snapshots", "benchmark_note"):
+            self.assertEqual(g[k], i[k], k)
+        self.assertEqual({k: v for k, v in g["benchmark"].items() if k != "_path"}, i["benchmark"])   # find_shipped notes where it found it
+        self.assertEqual(set(g["history"]), set(i["history"]))
+        g["run_at"] = i["run_at"]
+        self.assertEqual(json.dumps(engine.build_report(g, "Team 3", log=QUIET)), json.dumps(engine.build_report(i, "Team 3", log=QUIET)))
+
+    def test_no_history_gathers_only_the_current_league(self):
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            g, _ = self.gather(i, tmp, "--no-history")
+        self.assertEqual((g["chain"], g["history"], g["options"]["history"]), ([i["chain"][0]], {}, False))
+
+    def test_snapshot_index_failure_skips_trade_history(self):
+        def down(*a, **k):
+            raise OSError("rate limited")
+        i = synth_league.make_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            g, lines = self.gather(i, tmp, index=down)
+        self.assertIsNone(g["snapshot_index"])
+        self.assertIn("trade history skipped: rate limited", lines)
+
+
+class RecordReplayTest(unittest.TestCase):
+    FILES = ("summary.json", "board-data.json", "brief.md", "trade-board.html")
+
+    def run_cli(self, argv, api=None):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return cli.main(argv, api=api)
+
+    def read(self, folder):
+        out = {}
+        for f in self.FILES:
+            with open(os.path.join(folder, f), encoding="utf-8") as fh:
+                out[f] = "\n".join(l for l in fh.read().split("\n") if '"seconds"' not in l and '"api_calls"' not in l)
+        return out
+
+    def record(self, tmp, *extra):
+        i = synth_league.make_inputs()
+        argv = ["--league", i["chain"][0], "--team", "Team 3", "--cache-dir", os.path.join(tmp, "cache"),
+                "--out", os.path.join(tmp, "a"), "--record", os.path.join(tmp, "rec"), *extra]
+        with mock.patch.object(fetch, "values_csv", lambda *a, **k: i["values_csv"]), \
+                mock.patch.object(fetch, "snapshot_index", lambda *a, **k: i["snapshot_index"]), \
+                mock.patch.object(fetch, "snapshot_csv", lambda cache_dir, sha: i["snapshots"][sha]):
+            self.assertEqual(self.run_cli(argv, api=synth_league.FakeSleeper(i)), 0)
+
+    def replay(self, tmp, out, *extra):
+        return self.run_cli(["--replay", os.path.join(tmp, "rec"), "--out", os.path.join(tmp, out), *extra])
+
+    def test_record_then_replay_twice_is_identical(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            self.assertEqual(self.replay(tmp, "b"), 0)
+            self.assertEqual(self.replay(tmp, "c"), 0)
+            a, b, c = (self.read(os.path.join(tmp, x)) for x in "abc")
+            self.assertEqual(a, b)
+            self.assertEqual(b, c)
+
+    def test_replay_needs_no_network(self):
+        class NoApi:
+            def __getattr__(self, name):
+                raise AssertionError(f"replay called api.{name}")
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            with mock.patch.object(socket, "socket", side_effect=AssertionError("network")), \
+                    mock.patch.object(cli, "Sleeper", side_effect=AssertionError("Sleeper built")):
+                self.assertEqual(self.run_cli(["--replay", os.path.join(tmp, "rec"), "--out", os.path.join(tmp, "b")], api=NoApi()), 0)
+
+    def test_replay_writes_stages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            self.replay(tmp, "b")
+            self.assertEqual(sorted(os.listdir(os.path.join(tmp, "b", "stages"))),
+                             sorted(f"{n}.json" for n in ("league", "assets", "grade", "ledger", "deals", "three_team_deals", "trade_history")))
+
+    def test_no_history_survives_record_and_replay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp, "--no-history")
+            self.assertEqual(self.replay(tmp, "b"), 0)
+            self.assertEqual(self.read(os.path.join(tmp, "a")), self.read(os.path.join(tmp, "b")))
+            with open(os.path.join(tmp, "rec", "meta.json"), encoding="utf-8") as f:
+                self.assertIs(json.load(f)["options"]["history"], False)
+
+    def test_replay_refuses_flags_that_only_affect_gathering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            rec = os.path.join(tmp, "rec")
+            for extra in (["--no-history"], ["--threads", "12"], ["--cache-dir", tmp], ["--league", "1"], ["--pool"]):
+                err = io.StringIO()
+                with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                    cli.main(["--replay", rec, *extra])
+                self.assertEqual(cm.exception.code, 2)
+                self.assertIn(f"--replay takes its data from the recording; remove {extra[0]}", err.getvalue())
+            self.assertEqual(self.replay(tmp, "b", "--team", "Team 3"), 0)
+
+    def test_record_to_an_existing_file_exits_2(self):
+        i = synth_league.make_inputs()
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cli, "gather", return_value=i), contextlib.redirect_stderr(err):
+            target = os.path.join(tmp, "afile")
+            open(target, "w").close()
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = cli.main(["--league", "1", "--team", "Team 3", "--out", os.path.join(tmp, "a"), "--record", target], api=mock.Mock(calls=0))
+        self.assertEqual(code, 2)
+        self.assertIn("the report was written, the recording was not saved", err.getvalue())
+
+    def test_replay_unknown_team(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            with self.assertRaisesRegex(SystemExit, "No team matches 'Nobody'"):
+                self.replay(tmp, "b", "--team", "Nobody")
+
+    def test_replay_missing_folder_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.record(tmp)
+            os.remove(os.path.join(tmp, "rec", "pull.json"))
+            self.assertEqual(self.replay(tmp, "b"), 2)
+
+    def test_record_and_replay_together_is_refused(self):
+        with self.assertRaises(SystemExit) as cm:
+            self.run_cli(["--record", "x", "--replay", "y"])
+        self.assertEqual(cm.exception.code, 2)
+
+    def test_unsafe_league_id_to_record_exits_2(self):
+        i = synth_league.make_inputs()
+        i["history"]["../x"] = {}
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cli, "gather", return_value=i), contextlib.redirect_stderr(err):
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = cli.main(["--league", "1", "--team", "Team 3", "--out", os.path.join(tmp, "a"),
+                                 "--record", os.path.join(tmp, "rec")], api=mock.Mock(calls=0))
+            self.assertTrue(os.path.exists(os.path.join(tmp, "a", "summary.json")))
+        self.assertEqual(code, 2)
+        self.assertIn("the report was written, the recording was not saved", err.getvalue())
+
+    def test_normal_run_value_error_propagates(self):
+        argv = ["--league", "1", "--team", "Team 3", "--out", "unused"]
+        with mock.patch.object(cli, "gather", side_effect=ValueError("boom")):
+            with self.assertRaisesRegex(ValueError, "boom"):
+                self.run_cli(argv, api=mock.Mock(calls=0))
+        with mock.patch.object(cli, "gather", return_value=synth_league.make_inputs()), \
+                mock.patch.object(engine, "build_report", side_effect=ValueError("engine boom")):
+            with self.assertRaisesRegex(ValueError, "engine boom"):
+                self.run_cli(argv, api=mock.Mock(calls=0))
+
+
+if __name__ == "__main__":
+    unittest.main()
