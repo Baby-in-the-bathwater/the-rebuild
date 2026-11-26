@@ -72,6 +72,61 @@ describe("mountBoard", () => {
     }
   });
 
+  it("labels each roster row's stats, for the narrow layout that has no column headings", () => {
+    const row = document.querySelector("#rosters .row")!;
+    const labels = [...row.querySelectorAll(".stats .u")].map((n) => n.textContent!.trim());
+    expect(labels).toEqual(["age", "ppg", "P/V"]);
+    // The name, the stats and the value are separate cells, so the narrow layout can put the stats under the name.
+    expect([...row.children].map((n) => n.className.split(" ")[0])).toEqual(["badge", "nm", "stats", "num"]);
+  });
+
+  it("marks one roster as the one a narrow screen shows, yours first, and switches it from the bar", () => {
+    const current = () => [...document.querySelectorAll<HTMLElement>("#rosters > .panel.cur")].map((p) => Number(p.dataset.rid));
+    const buttons = () => [...document.querySelectorAll<HTMLButtonElement>("#rbar .rs")];
+    expect(current()).toEqual([data.me_rid]);
+    expect(buttons().map((b) => Number(b.dataset.ros))).toEqual(
+      [...document.querySelectorAll<HTMLElement>("#rosters > .panel")].map((p) => Number(p.dataset.rid)),
+    );
+    expect(buttons()[0]!.textContent).toBe("You");
+    const other = buttons().find((b) => b.getAttribute("aria-selected") === "false")!;
+    const rid = Number(other.dataset.ros);
+    other.click();
+    expect(errors).toEqual([]);
+    expect(current()).toEqual([rid]);
+    expect((stored() as { ros?: number }).ros).toBe(rid);
+    expect(buttons().find((b) => Number(b.dataset.ros) === rid)!.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("moves a narrow screen to the new team's roster when it was showing the old team's", () => {
+    // The test above left the selected team's roster on screen.
+    const tab = [...document.querySelectorAll<HTMLButtonElement>("#tabs .tab")].find(
+      (b) => b.getAttribute("aria-selected") === "false",
+    )!;
+    tab.click();
+    expect(errors).toEqual([]);
+    expect(document.querySelector<HTMLElement>("#rosters > .panel.cur")!.dataset.rid).toBe(tab.dataset.team);
+    document.querySelector<HTMLButtonElement>('#rbar .rs[data-ros="' + data.me_rid + '"]')!.click();
+  });
+
+  it("shows the trade's return in the bar above the rosters", () => {
+    const pct = document.querySelector("#rail .tfoot .big")?.textContent;
+    const go = document.querySelector("#rbar .rgo")!;
+    expect(go.textContent).toBe(pct ? `Trade ${pct}` : "Trade");
+  });
+
+  it("names the column of every cell in the league-trades tables, for the narrow layout's cards", () => {
+    document.querySelector<HTMLButtonElement>('#views .view[data-view="history"]')!.click();
+    expect(errors).toEqual([]);
+    for (const table of document.querySelectorAll("#history table.ht")) {
+      const heads = [...table.querySelectorAll("thead th")].map((th) => th.textContent!.replace(/ [▲▼]$/, ""));
+      for (const tr of table.querySelectorAll("tbody tr")) {
+        const cells = [...tr.querySelectorAll("td")];
+        expect(cells.slice(1).map((td) => td.dataset.l)).toEqual(heads.slice(1));
+      }
+    }
+    document.querySelector<HTMLButtonElement>('#views .view[data-view="board"]')!.click();
+  });
+
   it("stores the selection under the league's key when another team is chosen", () => {
     const before = stored()?.team;
     const tab = [...document.querySelectorAll<HTMLButtonElement>("#tabs .tab")].find(

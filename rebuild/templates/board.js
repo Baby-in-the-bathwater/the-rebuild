@@ -49,6 +49,7 @@ function assetOf(team, key) {
   return pk && {kind: "pick", key: pk.key, label: pickLabel(pk), value: px(pk.value), dp: pk.value || 0};
 }
 let refocus = null;
+let tabTeam = null;   // the team whose tab was last brought into view
 
 // All-deals view: every drafted deal as a card, variants side by side, in the brief's ranked order by default.
 const PL = Object.fromEntries(DATA.teams.flatMap(t => t.players.map(p => [String(p.id), p])));
@@ -185,7 +186,7 @@ function panel(team, hl, isMe, opts = {}) {
     for (const p of ps) {
       const m = hl.players[p.id];
       const cls = isMe && DATA.ledger[p.id] ? " " + esc(DATA.ledger[p.id]) : "";
-      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${esc(p.id)}" data-key="p:${esc(p.id)}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${esc(p.name)}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${esc(p.inj)}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}${p.sig && p.sig.tag === "buy" ? '<span class="tag bl">BUY LOW</span>' : ""}${p.sig && p.sig.tag === "sell" ? '<span class="tag sh">SELL HIGH</span>' : ""}</span><span class="num">${esc(p.team)}</span><span class="num">${p.age ?? ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}</span>${pvCell(p)}<span class="num val">${p.value ? fmt(px(p.value)) + was(p.value) : "–"}</span></div>`);
+      h.push(`<div class="row${m ? " hl " + m : ""}${cls}" data-id="${esc(p.id)}" data-key="p:${esc(p.id)}" role="button" tabindex="0" aria-pressed="${!!m}"><span class="badge" style="background:${PC[pos]}">${pos}</span><span class="nm">${esc(p.name)}${p.ir ? '<span class="tag ir">IR</span>' : (p.inj ? `<small>${esc(p.inj)}</small>` : "")}${p.taxi ? '<span class="tag tx">TAXI</span>' : ""}${p.startable ? '<span class="tag st">ST</span>' : ""}${p.sig && p.sig.tag === "buy" ? '<span class="tag bl">BUY LOW</span>' : ""}${p.sig && p.sig.tag === "sell" ? '<span class="tag sh">SELL HIGH</span>' : ""}</span><span class="stats"><span class="num">${esc(p.team)}</span><span class="num">${p.age != null ? `<span class="u">age </span>${esc(p.age)}` : ""}</span><span class="num ppg${p.startable ? " good" : ""}">${p.gp ? p.ppg.toFixed(1) : "–"}<span class="u"> ppg</span></span>${pvCell(p)}</span><span class="num val">${p.value ? fmt(px(p.value)) + was(p.value) : "–"}</span></div>`);
     }
     h.push(`</div>`);
   }
@@ -208,10 +209,10 @@ function panel(team, hl, isMe, opts = {}) {
 
 function pvCell(p) {
   const s = p.sig;
-  if (!s) return `<span class="num pv" title="Fewer than 4 games with points: no production read yet">–</span>`;
+  if (!s) return `<span class="num pv" title="Fewer than 4 games with points: no production read yet"><span class="u">P/V </span>–</span>`;
   const dir = s.gap > 0 ? " up" : (s.gap < 0 ? " down" : "");
   const tip = `${p.pos}${s.prod} by PPG, ${p.pos}${s.price} by value (of ${s.n} rostered ${p.pos}s with 4+ games)`;
-  return `<span class="num pv${dir}${s.tag ? " tagged" : ""}" title="${esc(tip)}">${s.gap > 0 ? "+" : ""}${s.gap}</span>`;
+  return `<span class="num pv${dir}${s.tag ? " tagged" : ""}" title="${esc(tip)}"><span class="u">P/V </span>${s.gap > 0 ? "+" : ""}${s.gap}</span>`;
 }
 
 // League trades view: how the league prices things, who trades well, and every trade priced then and now.
@@ -224,7 +225,7 @@ function renderHistory() {
 
   // 1. how the league prices things
   const M = H.market;
-  const mrow = (label, r) => `<tr><td class="l">${esc(label)}</td><td>${r.trades}</td><td>${r.value !== undefined ? fmt(r.value) : ""}</td><td class="${pctCls(r.pct)}">${r.pct === null ? "–" : r.pct + "%"}</td><td class="l">${esc(r.read)}</td></tr>`;
+  const mrow = (label, r) => `<tr><td class="l">${esc(label)}</td><td data-l="Trades">${r.trades}</td><td data-l="Value sold">${r.value !== undefined ? fmt(r.value) : ""}</td><td data-l="Got back" class="${pctCls(r.pct)}">${r.pct === null ? "–" : r.pct + "%"}</td><td data-l="Read" class="l">${esc(r.read)}</td></tr>`;
   h.push(`<div class="hsec"><h2>How this league trades</h2>
     <p class="hint">For each kind of asset, what sellers got back, against the DynastyProcess value the week of the trade (${M.trades} two-team trades). Over 100%: this league pays more than market, so it is a good thing to sell here. Under 100%: it goes cheap here, so it is a good thing to buy. Fewer than 5 trades is marked thin.</p>
     <div class="tw"><table class="ht"><thead><tr><th>When someone sells</th><th>Trades</th><th>Value sold</th><th>Got back</th><th class="l">Read</th></tr></thead><tbody>
@@ -243,9 +244,9 @@ function renderHistory() {
     <p class="hint">Won-lost-even uses today's values: a side wins when it got 10% and 150+ value more than it gave. Return at trade is everything received over everything sent, at the values of each trade's week. Net starter points: what a manager's acquisitions scored in their starting lineup since, minus what they gave up scored in the other team's. Click a manager to filter the trades below.</p>
     <div class="tw"><table class="ht lb"><thead><tr>${cols.map(([k, l, d]) => `<th${st.sort === k ? ` aria-sort="${st.dir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-k="${k}" data-d="${d}">${l}${st.sort === k ? (st.dir > 0 ? " ▲" : " ▼") : ""}</button></th>`).join("")}</tr></thead><tbody>
     ${rows.map(r => `<tr data-uid="${esc(r.uid)}" class="${r.uid === DATA.me_uid ? "me" : ""}${st.uid === r.uid ? " on" : ""}"><td class="l"><b>${esc(r.manager)}</b>${r.uid === DATA.me_uid ? ' <span style="color:var(--accent)">· you</span>' : ""}<small>${r.teams.filter(t => t !== r.manager).map(t => esc(t)).join(" · ")}</small></td>
-      <td>${r.trades}</td><td>${r.won}-${r.lost}-${r.even}</td><td class="${pctCls(r.pct_then)}">${r.pct_then === null ? "–" : r.pct_then + "%"}</td>
-      <td class="${r.net_then > 0 ? "good" : r.net_then < 0 ? "bad" : "mid"}">${sgn(r.net_then)}</td><td class="${r.net_now > 0 ? "good" : r.net_now < 0 ? "bad" : "mid"}">${sgn(r.net_now)}</td>
-      <td class="${r.pts > 0 ? "good" : r.pts < 0 ? "bad" : "mid"}">${sgn(r.pts)}</td></tr>`).join("")}
+      <td data-l="Trades">${r.trades}</td><td data-l="Won-lost-even">${r.won}-${r.lost}-${r.even}</td><td data-l="Return at trade" class="${pctCls(r.pct_then)}">${r.pct_then === null ? "–" : r.pct_then + "%"}</td>
+      <td data-l="Net value at trade" class="${r.net_then > 0 ? "good" : r.net_then < 0 ? "bad" : "mid"}">${sgn(r.net_then)}</td><td data-l="Net value today" class="${r.net_now > 0 ? "good" : r.net_now < 0 ? "bad" : "mid"}">${sgn(r.net_now)}</td>
+      <td data-l="Net starter pts" class="${r.pts > 0 ? "good" : r.pts < 0 ? "bad" : "mid"}">${sgn(r.pts)}</td></tr>`).join("")}
     </tbody></table></div></div>`);
 
   // 3. every trade
@@ -330,12 +331,21 @@ function render() {
   const custom = sel.custom || null;
   const inTrade = custom ? [...new Set(custom.moves.flatMap(m => [m.from, m.to]))].filter(r => T[r] && r !== ME) : [];
   const shown = [ME, other.rid, ...pins, ...inTrade].filter((r, k, a) => a.indexOf(r) === k);
+  // A narrow screen shows one of them at a time (sel.ros, yours by default), chosen in the bar above the rosters.
+  const cur = shown.includes(sel.ros) ? sel.ros : ME;
 
+  const tabsX = tabs.scrollLeft;
   tabs.innerHTML = others.map(r => `<span class="tabw"><button class="tab${shown.includes(r) ? " shown" : ""}" role="tab" aria-selected="${r === sel.team}" data-team="${r}">${esc(T[r].name)}${who(T[r])}${withDeals.includes(r) ? '<span class="dot"></span>' : ""}</button><button class="pin" type="button" data-pin="${r}" aria-pressed="${pins.includes(r)}" title="${pins.includes(r) ? "Unpin this roster" : "Show this roster alongside"}" aria-label="${pins.includes(r) ? "Unpin" : "Pin"} ${esc(T[r].name)}">${pins.includes(r) ? "−" : "+"}</button></span>`).join("");
-  // selecting a team keeps pins and any trade in progress (that is how more teams' pieces get added); an empty trade is dropped
+  // On a narrow screen the tabs are one row that scrolls sideways: keep its place, and bring a newly selected team into view.
+  tabs.scrollLeft = tabsX;
+  const onTab = tabs.querySelector('.tab[aria-selected="true"]');
+  if (onTab && tabTeam !== sel.team) tabs.scrollLeft = onTab.parentElement.offsetLeft - (tabs.clientWidth - onTab.parentElement.offsetWidth) / 2;
+  tabTeam = sel.team;
+  // selecting a team keeps pins and any trade in progress (that is how more teams' pieces get added); an empty trade is dropped.
+  // If the old team's roster was the one on a narrow screen, the new team's takes its place.
   tabs.querySelectorAll(".tab").forEach(b => b.onclick = () => {
     const keep = sel.custom && sel.custom.moves.length ? sel.custom : null;
-    sel = {...sel, team: +b.dataset.team, deal: 0, v: null, view: "board", custom: keep};
+    sel = {...sel, team: +b.dataset.team, deal: 0, v: null, view: "board", custom: keep, ros: sel.ros === sel.team ? +b.dataset.team : sel.ros};
     save(); render();
   });
   const togglePin = rid => {
@@ -362,7 +372,7 @@ function render() {
   }
   document.getElementById("board").classList.toggle("duo", shown.length <= 2);
   const ros = document.getElementById("rosters"), scrollX = ros.scrollLeft;
-  ros.innerHTML = shown.map(rid => `<section class="panel" data-rid="${rid}" aria-label="${esc(T[rid].name)} roster">${panel(T[rid], hl, rid === ME, {focus: rid === other.rid, removable: pins.includes(rid) && !inTrade.includes(rid) && rid !== other.rid})}</section>`).join("");
+  ros.innerHTML = shown.map(rid => `<section class="panel${rid === cur ? " cur" : ""}" data-rid="${rid}" aria-label="${esc(T[rid].name)} roster">${panel(T[rid], hl, rid === ME, {focus: rid === other.rid, removable: pins.includes(rid) && !inTrade.includes(rid) && rid !== other.rid})}</section>`).join("");
   ros.scrollLeft = scrollX;
   ros.querySelectorAll(".ttype").forEach(sl => sl.onchange = () => {
     const rid = +sl.dataset.rid;
@@ -413,7 +423,7 @@ function render() {
       ${mlist.map(({m, i}) => `<button class="deal multi" aria-selected="${isBase && baseIdx === i}" data-m="${i}">${esc(m.title)}<small>${m.teams.filter(r => r !== ME).map(r => esc(tname(r))).join(" + ")}</small></button>`).join("")}</div>`
       : `<p class="note">Nothing drafted with ${esc(other.name)}: ${DATA.mode === "contend" ? "no older producer at your weak spots" : "not a contender with pick capital, or nothing on your sell list fits"}.</p>`}
     ${deal ? `<div class="vars${custom ? " custom" : ""}">${vnames.map(n => `<button class="var" aria-selected="${!custom && n === v}" data-v="${esc(n)}">${esc(n)}</button>`).join("")}</div>` : ""}
-    <p class="hint">Use a tab's <b>+</b> to put more rosters on screen; scroll sideways to see them all.</p></div>`;
+    <p class="hint">Use a tab's <b>+</b> to put more rosters on screen<span class="wide">; scroll sideways to see them all</span><span class="narrow">, then switch between them in the bar above the roster</span>.</p></div>`;
 
   let right;
   if (!R.length && !custom) {
@@ -438,6 +448,12 @@ function render() {
       ${isBase ? `<p class="why">${esc(MULTI[baseIdx].why)}</p>` : ""}${foot}</div>`;
   }
   rail.innerHTML = multi ? right : left + right;
+  // The bar above the rosters (narrow screens only): which roster is on screen, and the trade's return with a way back up to it.
+  const rbar = document.getElementById("rbar"), barP = pctOf(ME);
+  rbar.innerHTML = `<div class="rsw" role="tablist" aria-label="Roster on screen">${shown.map(rid => `<button class="rs" type="button" role="tab" aria-selected="${rid === cur}" data-ros="${rid}">${rid === ME ? "You" : esc(tname(rid))}</button>`).join("")}</div>
+    <button class="rgo ${R.length ? pcls(barP) : ""}" type="button" aria-label="Go to the trade${R.length && barP !== null ? `, your return ${barP}%` : ""}">Trade${R.length ? ` <b>${barP === null ? "–" : barP + "%"}</b>` : ""}</button>`;
+  rbar.querySelectorAll(".rs").forEach(b => b.onclick = () => { sel.ros = +b.dataset.ros; save(); render(); });
+  rbar.querySelector(".rgo").onclick = () => rail.lastElementChild.scrollIntoView({behavior: "smooth", block: "start"});
   rail.classList.toggle("solo", multi);
   rail.querySelectorAll(".deal[data-i]").forEach(b => b.onclick = () => { sel.deal = +b.dataset.i; sel.v = null; sel.custom = null; save(); render(); });
   rail.querySelectorAll(".deal[data-m]").forEach(b => b.onclick = () => { sel.custom = {moves: movesOfDeal(MULTI[+b.dataset.m]), base: "m" + b.dataset.m}; save(); render(); });

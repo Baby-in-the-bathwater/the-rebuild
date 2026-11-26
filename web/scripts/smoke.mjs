@@ -6,6 +6,7 @@
 //   SMOKE_CHROME     Chrome executable (default: the macOS install)
 //   SMOKE_PORT       port for wrangler dev (default 8787)
 //   SMOKE_SHOT       if set, a PNG path for a screenshot of the first board
+//   SMOKE_SHOT_PHONE if set, a PNG path for a full-page screenshot of the board at phone width
 import { spawn } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -195,6 +196,27 @@ try {
   if (!(await visible(page, team))) fail(`team "${team}" is not visible after the reload`);
   if (problems.length) fail(`errors on the reload:\n  ${problems.join("\n  ")}`);
   console.log(`reload: cached board ${seconds(cached.board)}, no Sleeper or GitHub requests`);
+
+  // 3b. The same board on a phone-sized screen: the page does not scroll sideways, no name is cut off, one roster is on
+  // screen under the bar that picks it, and the site's controls end the page instead of floating over it.
+  await page.setViewport({ width: 390, height: 844 }); // no isMobile: changing it would reload the page
+  const phone = await page.evaluate(() => {
+    const shown = (n) => n.offsetParent !== null;
+    return {
+      sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      cut: [...document.querySelectorAll(".nm, .lb, .il")].filter((n) => shown(n) && n.scrollWidth > n.clientWidth + 1).length,
+      rosters: [...document.querySelectorAll("#rosters > .panel")].filter(shown).length,
+      bar: shown(document.getElementById("rbar")),
+      controls: getComputedStyle(document.querySelector(".site-controls")).position,
+    };
+  });
+  if (process.env.SMOKE_SHOT_PHONE) await page.screenshot({ path: process.env.SMOKE_SHOT_PHONE, fullPage: true });
+  if (phone.sideways > 0) fail(`the board scrolls sideways by ${phone.sideways}px on a phone`);
+  if (phone.cut) fail(`${phone.cut} names are cut off on a phone`);
+  if (phone.rosters !== 1 || !phone.bar) fail(`a phone shows ${phone.rosters} rosters (want 1) and the roster bar is ${phone.bar ? "there" : "missing"}`);
+  if (phone.controls !== "static") fail(`the site's controls are ${phone.controls} on a phone`);
+  await page.setViewport({ width: 800, height: 600 });
+  console.log("phone: no sideways scroll, no cut-off names, one roster on screen");
 
   // 4. A league id that is not all digits gets the link back to the form; an unknown league says it was not found.
   await page.goto(`${ORIGIN}/board?league=NOPE1&team=x`, { waitUntil: "load" });

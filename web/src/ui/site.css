@@ -72,6 +72,11 @@ body.site-page {
 }
 .site-controls .site-btn { min-height:32px; padding:4px 12px; font-size:13px; background:transparent; border-color:transparent }
 .site-controls .site-btn:hover { border-color:var(--site-line) }
+/* On a phone a fixed group would sit over the roster's values, so the controls end the page instead. */
+@media (max-width: 719px) {
+  .site-controls { position:static; width:max-content; max-width:100%; margin:20px auto 0; box-shadow:none }
+  .site-controls .site-btn { min-height:40px }
+}
 
 /* Above the board: what this report could not do as a full run would. */
 .site-notices { display:grid; gap:6px; margin:12px 0 0; font:14px/1.4 var(--site-body) }
