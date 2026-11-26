@@ -3,21 +3,12 @@
 side got from what it received. Then what the league's trades say about how it prices positions, picks and age.
 
 Historical values come from the git history of the DynastyProcess data repo (one values.csv commit a week
-since 2019). Each snapshot is immutable, so it is downloaded once and cached under cache/dp_history/."""
-import csv
+since 2019). `fetch.snapshot_index` and `fetch.snapshot_csv` read them; this module only prices with them."""
 import datetime as dt
-import io
-import json
-import os
-import time
 from collections import defaultdict
-
-import requests
 
 from .values import Values
 
-COMMITS_URL = "https://api.github.com/repos/dynastyprocess/data/commits"
-RAW_URL = "https://raw.githubusercontent.com/dynastyprocess/data/{sha}/files/values.csv"
 EVEN_BAND = 0.10      # a side within 10% of the other on received value is an even trade
 MIN_EDGE = 150        # and an edge under this many value points is noise (two near-worthless sides are even)
 PREMIUM_BAND = 0.08   # league pays at least 8% over (or under) market before we call it a premium (or discount)
@@ -25,43 +16,8 @@ THIN = 5              # fewer trades than this in a category: show it, but flag 
 
 
 # ------------------------------------------------------------------ DynastyProcess snapshots
-def snapshot_index(cache_dir, ttl=6 * 24 * 3600):
-    """[(iso date, sha)] for every values.csv commit, oldest first. Cached for most of a week."""
-    d = os.path.join(cache_dir, "dp_history")
-    os.makedirs(d, exist_ok=True)
-    p = os.path.join(d, "commits.json")
-    if os.path.exists(p) and time.time() - os.path.getmtime(p) < ttl:
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
-    headers = {"Accept": "application/vnd.github+json"}
-    token = os.environ.get("GITHUB_TOKEN")   # the Actions runner's token: its shared IP hits the anonymous limit often
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    out, page = [], 1
-    while True:
-        r = requests.get(COMMITS_URL, params={"path": "files/values.csv", "per_page": 100, "page": page}, timeout=30,
-                         headers=headers)
-        r.raise_for_status()
-        batch = r.json()
-        out += [(c["commit"]["committer"]["date"], c["sha"]) for c in batch]
-        if len(batch) < 100:
-            break
-        page += 1
-    out.sort()
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(out, f)
-    return out
-
-
-def snapshot_values(cache_dir, sha, superflex, date=None):
-    p = os.path.join(cache_dir, "dp_history", f"{sha}.csv")
-    if not os.path.exists(p):
-        r = requests.get(RAW_URL.format(sha=sha), timeout=60)
-        r.raise_for_status()
-        with open(p, "w", encoding="utf-8", newline="") as f:
-            f.write(r.text)
-    with open(p, encoding="utf-8") as f:
-        v = Values(list(csv.DictReader(io.StringIO(f.read()))), superflex)
+def snapshot_values(text, superflex, date=None):
+    v = Values.from_csv(text, superflex)
     v.asof = v.asof or (date or "")[:10] or None   # files before April 2020 carry no scrape_date
     return v
 
@@ -138,14 +94,38 @@ def _starter_points(bundles):
 
 
 # ------------------------------------------------------------------ the history
-def build(cache_dir, bundles, league, values, log=print):
+def _seasons(bundles):
+    return sorted(bundles.values(), key=lambda b: int(b["league"]["season"]))
+
+
+def completed_trades(bundles):
+    """[(season bundle, trade)] for every completed trade, oldest season first."""
+    return [(b, t) for b in _seasons(bundles) for t in (b.get("trades") or []) if t.get("status") == "complete"]
+
+
+def _created(t):
+    return dt.datetime.fromtimestamp(t["created"] / 1000, tz=dt.timezone.utc)
+
+
+def needed_snapshots(bundles, index):
+    """{sha: iso date} for every snapshot `build` reads to price these bundles' trades, in the order it reads them."""
+    out = {}
+    for _, t in completed_trades(bundles):
+        sd = snapshot_for(index, _created(t))
+        if sd:
+            out.setdefault(sd[1], sd[0])
+    return out
+
+
+def build(bundles, league, values, index, snapshots, now, log=print):
     """Every completed trade across the league's seasons, priced then and now. `bundles` are the league's own
-    season bundles (any order); `league` and `values` are today's. Returns the board's trade_history block."""
-    seasons = sorted(bundles.values(), key=lambda b: int(b["league"]["season"]))
-    trades = [(b, t) for b in seasons for t in (b.get("trades") or []) if t.get("status") == "complete"]
+    season bundles (any order); `league` and `values` are today's; `index` is the snapshot index and `snapshots`
+    maps sha to CSV text for at least `needed_snapshots(bundles, index)`; `now` is an aware UTC datetime.
+    Returns the board's trade_history block."""
+    seasons = _seasons(bundles)
+    trades = completed_trades(bundles)
     if not trades:
         return None
-    index = snapshot_index(cache_dir)
     superflex = league.fmt["superflex"]
     by_season = {int(b["league"]["season"]): b for b in seasons}
     drafted = {s: _draft_maps(b) for s, b in by_season.items()}
@@ -155,7 +135,7 @@ def build(cache_dir, bundles, league, values, log=print):
 
     def snap(date, sha):
         if sha not in snaps:
-            snaps[sha] = snapshot_values(cache_dir, sha, superflex, date)
+            snaps[sha] = snapshot_values(snapshots[sha], superflex, date)
         return snaps[sha]
 
     def pname(pid):
@@ -192,7 +172,7 @@ def build(cache_dir, bundles, league, values, log=print):
     out = []
     for b, t in trades:
         season = int(b["league"]["season"])
-        when = dt.datetime.fromtimestamp(t["created"] / 1000, tz=dt.timezone.utc)
+        when = _created(t)
         week = int(t.get("leg") or 1)
         users = {u["user_id"]: (u.get("display_name") or u.get("username") or "?") for u in b.get("users") or []}
         team = {u["user_id"]: ((u.get("metadata") or {}).get("team_name") or "").strip() for u in b.get("users") or []}
@@ -264,7 +244,7 @@ def build(cache_dir, bundles, league, values, log=print):
         out.append({"id": t.get("transaction_id"), "date": when.strftime("%Y-%m-%d"), "season": season, "week": week,
                     "values_asof": then.asof if then else None, "sides": list(sides.values()),
                     "winner_then": verdict("got_then", "gave_then"), "winner_now": verdict("got_now", "gave_now"),
-                    "days_ago": (dt.datetime.now(dt.timezone.utc) - when).days})
+                    "days_ago": (now - when).days})
     out.sort(key=lambda x: x["date"], reverse=True)
     log(f"trade history: {len(out)} trades across {len(seasons)} seasons, priced with {len(snaps)} weekly value snapshots")
     return {"trades": out, "managers": managers(out), "market": market(out), "values_now": values.asof}

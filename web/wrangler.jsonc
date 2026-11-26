@@ -1,0 +1,14 @@
+{
+  // Static assets only: no Worker script and no account id. The account comes from
+  // CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in the shell or in CI secrets.
+  // Deploy with `wrangler deploy --env staging` or `--env production`.
+  "name": "the-rebuild",
+  "compatibility_date": "2026-11-01",
+  // html_handling is left at its default, "auto-trailing-slash": /board serves board.html (and /board.html redirects
+  // to /board). An unknown path gets public/404.html with a 404 status.
+  "assets": { "directory": "./dist", "not_found_handling": "404-page" },
+  "env": {
+    "staging": { "name": "the-rebuild-staging" },
+    "production": { "name": "the-rebuild" }
+  }
+}

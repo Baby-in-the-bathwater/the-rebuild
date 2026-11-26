@@ -1,13 +1,16 @@
 """Render the interactive trade board (one HTML file, no server) from the grade, ledger and deals."""
+import html as html_lib
 import json
 import os
+import re
 from collections import defaultdict
 
 from .grade import SELL_AGE
 from .metrics import TH
 
-TEMPLATE = os.path.join(os.path.dirname(__file__), "templates", "trade_board.html")
-WEIGHTS_JS = os.path.join(os.path.dirname(TEMPLATE), "board_weights.js")
+TEMPLATES = os.path.join(os.path.dirname(__file__), "templates")
+TEMPLATE = os.path.join(TEMPLATES, "trade_board.html")
+PARTS = {"css": "board.css", "body": "board_body.html", "weights_js": "board_weights.js", "board_js": "board.js"}
 
 
 def _item(i):
@@ -86,12 +89,28 @@ def board_data(league, values, g, assets, deals, call_text, trade_history=None, 
             "teams": teams, "ledger": ledger, "deals": [deal_json(d) for d in deals], "note": note}
 
 
+def _read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def sources():
+    """The text of each shared part of the board: the stylesheet, the markup, the weights script and the board script.
+    The CLI inlines them into one file; the website loads the same files."""
+    return {k: _read(os.path.join(TEMPLATES, name)) for k, name in PARTS.items()}
+
+
 def render(data, out_path):
-    with open(TEMPLATE, encoding="utf-8") as f:
-        html = f.read()
-    with open(WEIGHTS_JS, encoding="utf-8") as f:
-        html = html.replace("/*__WEIGHTS_JS__*/", f.read())
-    html = html.replace("__TITLE__", f"{data['league']} Trade Board").replace("/*__DATA__*/null", json.dumps(data))
+    """One self-contained HTML file: the shell with the parts inlined and the data set on window.__BOARD_DATA__.
+    Only the web-fonts link points outside the file."""
+    parts = sources()
+    # `</` becomes `<\/` so a team name containing </script> cannot close the script element, and `<!--` becomes
+    # `<\u0021--` so it cannot start an HTML comment (which changes how the parser ends the script). Both stay valid JSON.
+    data_json = json.dumps(data).replace("</", "<\\/").replace("<!--", "<\\u0021--")
+    fill = {"__TITLE__": html_lib.escape(f"{data['league']} Trade Board"), "__CSS__": parts["css"], "__BODY__": parts["body"],
+            "__DATA__": data_json, "__WEIGHTS_JS__": parts["weights_js"], "__BOARD_JS__": parts["board_js"]}
+    # One pass, so text inside an inserted part is never mistaken for a placeholder.
+    html = re.sub("|".join(map(re.escape, fill)), lambda m: fill[m.group(0)], _read(TEMPLATE))
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
     return out_path

@@ -2,7 +2,47 @@
 import difflib
 from collections import defaultdict
 
-from .sleeper import position
+
+def position(pdb, pid):
+    """Position for a player id; team defenses are alphabetic ids with no players-db row."""
+    p = pdb.get(pid)
+    if p and p.get("position"):
+        return p["position"]
+    return "DEF" if str(pid).isalpha() else "?"
+
+
+def current_week(lg, state):
+    """The last regular-season week with games to count: all of them once the season is complete, the NFL week while
+    it is in season (state is Sleeper's state/nfl), none before it starts."""
+    settings = lg.get("settings") or {}
+    status = lg.get("status")
+    state_week = int(state.get("week") or 1) if str(state.get("season")) == str(int(lg["season"])) else None
+    reg_weeks = int(settings.get("playoff_week_start") or 15) - 1
+    if status == "complete":
+        return reg_weeks
+    if status == "in_season" and state_week:
+        return min(state_week, reg_weeks)
+    return 0
+
+
+def league_pull(api, league_id, state):
+    """The target league exactly as Sleeper returns it, or None if Sleeper has no such league. Matchups are raw for
+    weeks 1..current week, transactions raw for weeks 1..18; `League` does the filtering."""
+    lid = str(league_id)
+    lg = api.league(lid)
+    if not lg:
+        return None
+    rosters = api.rosters(lid)
+    users = api.users(lid)
+    traded = api.traded_picks(lid)
+    week = current_week(lg, state)
+    matchups = {str(wk): api.matchups(lid, wk) for wk in range(1, week + 1)}
+    transactions = {str(wk): api.transactions(lid, wk) for wk in range(1, 19)}
+    bracket = api.winners_bracket(lid)
+    drafts = api.drafts(lid)
+    return {"league": lg, "rosters": rosters, "users": users, "traded_picks": traded, "matchups": matchups,
+            "transactions": transactions, "winners_bracket": bracket, "drafts": drafts,
+            "picks": {d["draft_id"]: api.draft_picks(d["draft_id"]) for d in drafts}}
 
 
 def fmt_of(lg):
@@ -45,16 +85,16 @@ def strict_match(a, b):
 
 
 class League:
-    def __init__(self, api, league_id, log=print):
-        self.api = api
-        self.id = str(league_id)
-        self.lg = api.league(self.id)
-        if not self.lg:
-            raise SystemExit(f"League {league_id} not found on Sleeper.")
-        self.pdb = api.players()
-        self.rosters = api.rosters(self.id)
-        self.users = api.users(self.id)
-        self.traded = api.traded_picks(self.id)
+    def __init__(self, pull, players, state):
+        """`pull` is `fetch.league_pull`'s result, `players` Sleeper's players/nfl and `state` its state/nfl."""
+        self.lg = pull["league"]
+        self.id = str(self.lg["league_id"])
+        self.pdb = players
+        self.rosters = pull["rosters"]
+        self.users = pull["users"]
+        self.traded = pull["traded_picks"]
+        self.drafts = pull["drafts"]
+        self.draft_picks = pull["picks"]
         self.fmt = fmt_of(self.lg)
         self.n = self.lg.get("total_rosters") or len(self.rosters)
         self.season = int(self.lg["season"])
@@ -64,16 +104,7 @@ class League:
         self.playoff_teams = int(self.settings.get("playoff_teams") or 6)
         self.trade_deadline = self.settings.get("trade_deadline")
         self.status = self.lg.get("status")
-        state = api.state()
-        self.state_week = int(state.get("week") or 1) if str(state.get("season")) == str(self.season) else None
-        pws = int(self.settings.get("playoff_week_start") or 15)
-        self.reg_weeks = pws - 1
-        if self.status == "complete":
-            self.week = self.reg_weeks
-        elif self.status == "in_season" and self.state_week:
-            self.week = min(self.state_week, self.reg_weeks)
-        else:
-            self.week = 0
+        self.week = current_week(self.lg, state)
         # the current season's rookie draft is still ahead only before the season starts
         self.draft_pending = self.status in ("pre_draft", "drafting")
 
@@ -117,7 +148,7 @@ class League:
         self.matchups = {}
         self.pts, self.gp = defaultdict(float), defaultdict(int)
         for wk in range(1, self.week + 1):
-            ms = api.matchups(self.id, wk)
+            ms = pull["matchups"].get(str(wk)) or []
             if not ms or sum(sum((m.get("players_points") or {}).values()) for m in ms) == 0:
                 continue
             self.matchups[wk] = ms
@@ -128,11 +159,10 @@ class League:
                         self.gp[pid] += 1
         self.trades = []
         for wk in range(1, 19):
-            for t in api.transactions(self.id, wk):
+            for t in pull["transactions"].get(str(wk)) or []:
                 if t.get("type") == "trade" and t.get("status") == "complete":
                     self.trades.append(t)
-        self.bracket = api.winners_bracket(self.id)
-        log(f"league: {self.lg.get('name')} | {fmt_key(self.fmt)} | season {self.season} {self.status} | week {self.week} | {api.calls} calls")
+        self.bracket = pull["winners_bracket"]
 
     # ------------------------------------------------------------------ helpers
     def ppg(self, pid):
@@ -182,7 +212,6 @@ class League:
 
     def bundle(self):
         """This league-season in the same shape the crawler stores, so metrics treat it like any pooled season."""
-        drafts = self.api.drafts(self.id)
         return {"league": self.lg, "users": self.users, "rosters": self.rosters, "matchups": {str(k): v for k, v in self.matchups.items()},
-                "winners_bracket": self.bracket, "drafts": drafts, "picks": {d["draft_id"]: self.api.draft_picks(d["draft_id"]) for d in drafts},
+                "winners_bracket": self.bracket, "drafts": self.drafts, "picks": self.draft_picks,
                 "traded_picks": self.traded, "trades": self.trades, "through_week": self.week}
