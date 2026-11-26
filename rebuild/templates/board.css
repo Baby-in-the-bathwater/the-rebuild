@@ -1,4 +1,8 @@
-/* Sleeper-style trade page. Your roster pinned left, chosen counterparty right, deal rail between them on desktop and above the panels on a phone. Dark-first, Sleeper position hues. */
+/* Sleeper-style trade page. Dark-first, Sleeper position hues.
+   Phone first: the plain rules are the narrow layout (one column, one roster on screen at a time, two-line roster rows, tables as cards)
+   and the min-width rules add the wide one (your roster left, chosen counterparty right, the deal rail between them).
+   Three widths matter: 620px (tables), 720px (rosters side by side, tabs wrap) and 981px (the three-column board). Roster rows follow
+   their own panel's width, not the screen's, so a narrow panel on a wide screen gets the two-line rows too. */
 :root{
   --bg:#0f1420; --panel:#171d2c; --panel2:#1e2536; --line:#2a3245; --fg:#e8ecf4; --muted:#8e98ad; --accent:#f5c542;
   --qb:#f8296d; --rb:#00ceb8; --wr:#58a7ff; --te:#ffae58; --k:#b1b7c6; --def:#bd66ff; --pick:#c9d1e0;
@@ -15,40 +19,60 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .top h1{font-size:30px;line-height:1;text-transform:uppercase}
 .top .sub{color:var(--muted);font-size:13px}
 .call{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:4px;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:#1a1400;vertical-align:middle}
-.tabs{display:flex;flex-wrap:wrap;gap:6px;padding:12px 0}
-.tab{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:999px;padding:6px 12px;font:600 13px var(--body);cursor:pointer}
+/* one row that scrolls sideways, out to the screen's edges; wraps from 720px */
+.tabs{position:relative;display:flex;gap:6px;padding:12px 16px;margin:0 -16px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+.tabs::-webkit-scrollbar,.rsw::-webkit-scrollbar,.views::-webkit-scrollbar{display:none}
+.tab{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:999px;padding:10px 12px;font:600 13px var(--body);cursor:pointer;white-space:nowrap}
+@media (min-width:720px){.tabs{flex-wrap:wrap;overflow:visible;margin:0;padding:12px 0}.tab{padding:6px 12px}}
 .tab[aria-selected="true"]{background:var(--accent);color:#1a1400;border-color:var(--accent)}
 .tab .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--recv);margin-left:6px;vertical-align:1px}
 .tab[aria-selected="true"] .dot{background:#1a1400}
 .tab:focus-visible,.deal:focus-visible,.var:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-/* deal strip above, rosters side by side below in a horizontal scroller */
-.dealbar{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:14px;align-items:start;margin-bottom:14px}
-@media (max-width:860px){.dealbar{grid-template-columns:1fr}}
+/* deal strip above the rosters: the deals, then the trade; side by side from 861px, where a long deal list scrolls in place */
+.dealbar{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start;margin-bottom:14px}
+@media (min-width:861px){.dealbar{grid-template-columns:minmax(260px,340px) minmax(0,1fr)}.dealbar .deals{max-height:340px;overflow-y:auto}}
 .dealbar .panel{padding:12px}
 .dealbar h3{font-size:18px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em}
-.dealbar .deals{max-height:340px;overflow-y:auto}
 .mgrid{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
 .mgrid .mside{flex:1 1 240px;margin-top:0;min-width:0}
 .tfoot{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
 .tfoot .big{font:700 26px var(--display)}.tfoot .big.good{color:var(--recv)}.tfoot .big.bad{color:var(--send)}
-.rosters{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;scroll-snap-type:x proximity;align-items:start}
-.rosters > .panel{flex:0 0 min(500px,92vw);scroll-snap-align:start}
+/* rosters: one on screen under a sticky bar that picks it; from 720px all of them, side by side in a horizontal scroller, and no bar */
+.rosters > .panel{container:roster / inline-size}
+.rbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;margin:0 -16px 10px;padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--line)}
+.rsw{display:flex;gap:6px;flex:1;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+.rs,.rgo{flex:none;appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:10px 12px;font:600 13px var(--body);white-space:nowrap;cursor:pointer}
+.rs[aria-selected="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.rgo{background:var(--panel2);font:700 14px var(--display);letter-spacing:.06em;text-transform:uppercase}
+.rgo b{font-size:16px;letter-spacing:0;margin-left:4px}.rgo.good b{color:var(--recv)}.rgo.bad b{color:var(--send)}
+.rs:focus-visible,.rgo:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint .wide{display:none}
+@media (max-width:719px){.rosters > .panel:not(.cur){display:none}}
+@media (min-width:720px){
+  .rbar,.hint .narrow{display:none}.hint .wide{display:inline}
+  .rosters{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;scroll-snap-type:x proximity;align-items:start}
+  .rosters > .panel{flex:0 0 min(500px,92vw);scroll-snap-align:start}
+}
 /* two teams on screen: the old three-column board, your roster | deals and trade | theirs. A third roster reflows to the strip-above layout. */
-#board.duo{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,340px) minmax(0,1fr);gap:14px;align-items:start}
-#board.duo .rosters{display:contents}
-#board.duo .rosters > .panel:first-child{order:1}
-#board.duo .dealbar{order:2;grid-template-columns:1fr;margin-bottom:0}
-#board.duo .rosters > .panel:last-child{order:3}
-#board.duo .mgrid{flex-direction:column}
-#board.duo .mgrid .mside{flex:none}
-@media (max-width:980px){#board.duo{grid-template-columns:1fr}#board.duo .dealbar{order:0}}
+@media (min-width:981px){
+  #board.duo{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,340px) minmax(0,1fr);gap:14px;align-items:start}
+  #board.duo .rosters{display:contents}
+  #board.duo .rosters > .panel:first-child{order:1}
+  #board.duo .dealbar{order:2;grid-template-columns:1fr;margin-bottom:0}
+  #board.duo .rosters > .panel:last-child{order:3}
+  #board.duo .mgrid{flex-direction:column}
+  #board.duo .mgrid .mside{flex:none}
+}
+@media (min-width:720px) and (max-width:980px){#board.duo .rosters{flex-direction:column;overflow:visible}#board.duo .rosters > .panel{flex:none;width:100%}}
 .phead{position:relative}
-.unpin{position:absolute;top:8px;right:10px;appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:6px;font:700 13px var(--body);line-height:1;padding:4px 7px;cursor:pointer}
+.unpin{position:absolute;top:8px;right:10px;appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:6px;font:700 13px var(--body);line-height:1;padding:10px 13px;cursor:pointer}
+@media (min-width:720px){.unpin{padding:4px 7px}}
 .unpin:hover{color:var(--send);border-color:var(--send)}.unpin:focus-visible,.pin:focus-visible{outline:2px solid var(--accent)}
 .phead .focus{font:700 10px var(--display);letter-spacing:.06em;text-transform:uppercase;color:#1a1400;background:var(--accent);border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:4px}
-.tabw{display:inline-flex;align-items:stretch}
+.tabw{display:inline-flex;align-items:stretch;flex:none}
 .tabw .tab{border-radius:999px 0 0 999px}
-.pin{appearance:none;border:1px solid var(--line);border-left:0;background:var(--panel);color:var(--muted);border-radius:0 999px 999px 0;padding:0 10px;font:700 14px var(--body);cursor:pointer}
+.pin{appearance:none;border:1px solid var(--line);border-left:0;background:var(--panel);color:var(--muted);border-radius:0 999px 999px 0;padding:0 14px;font:700 14px var(--body);cursor:pointer}
+@media (min-width:720px){.pin{padding:0 10px}}
 .pin[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 25%,var(--panel));color:var(--fg)}
 .tab.shown:not([aria-selected="true"]){border-color:var(--accent)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:0;overflow:hidden}
@@ -59,7 +83,12 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .group{padding:8px 10px 2px}
 .gh{display:flex;align-items:center;gap:8px;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 4px 4px}
 .gh .bar{height:3px;flex:1;border-radius:2px;opacity:.85}
-.row{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 40px 56px;gap:0 8px;align-items:center;padding:5px 4px;border-radius:6px;font-variant-numeric:tabular-nums}
+/* a roster row: position, name and value, with team, age, PPG and P/V on a second line under the name. A panel 420px or wider
+     lays the same pieces out as one line under column headings (the roster container rule below). Names wrap; they are never cut. */
+.row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:1px 8px;align-items:center;padding:7px 4px;border-radius:6px;font-variant-numeric:tabular-nums}
+.row .badge,.row .val{grid-row:1 / 3}.row .val{grid-column:3}
+.stats{grid-column:2;display:flex;flex-wrap:wrap;gap:0 10px}
+.stats .num{text-align:left}.stats .num:empty{display:none}
 .row + .row{border-top:1px solid var(--line)}
 .row.hl{box-shadow:var(--glow);background:color-mix(in srgb,var(--accent) 12%,transparent);border-top-color:transparent}
 .row.hl.send{box-shadow:0 0 0 2px var(--send);background:color-mix(in srgb,var(--send) 14%,transparent)}
@@ -67,7 +96,7 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .row.sell .nm::after{content:"SELL";font:700 10px var(--display);letter-spacing:.05em;color:var(--send);margin-left:6px}
 .row.hold .nm::after{content:"HOLD";font:700 10px var(--display);letter-spacing:.05em;color:var(--accent);margin-left:6px}
 .badge{font:700 11px var(--display);letter-spacing:.06em;color:#0b0e14;border-radius:4px;padding:3px 0;text-align:center}
-.nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.nm{min-width:0;overflow-wrap:anywhere;font-weight:500}
 .nm small{color:var(--muted);font-weight:400;margin-left:5px}
 .tag{display:inline-block;font:700 10px var(--display);letter-spacing:.05em;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:1px}
 .tag.ir{background:var(--send);color:#fff}.tag.bl{background:var(--recv);color:#0b0e14}.tag.sh{background:var(--te);color:#0b0e14}
@@ -84,16 +113,27 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .wctl input[type=range]{width:120px;accent-color:var(--accent)}
 .wctl b{font-family:var(--mono);font-size:12px;min-width:44px}
 .wstrip .dp{color:var(--muted);font-size:12px}
-.wstrip .reset{appearance:none;border:1px solid var(--line);background:none;color:var(--muted);border-radius:6px;padding:3px 9px;font:600 12px var(--body);cursor:pointer}
+.wstrip .reset{appearance:none;border:1px solid var(--line);background:none;color:var(--muted);border-radius:6px;padding:9px 12px;font:600 12px var(--body);cursor:pointer}
+@media (min-width:720px){.wstrip .reset{padding:3px 9px}}
 .wstrip .reset:hover{color:var(--fg)}
 .wctl.rate input[type=range]{width:90px}
 .mt.lu{color:var(--muted)}.mt.lu b.good{color:var(--recv)}.mt.lu b.bad{color:var(--send)}
 .tfoot .pure{font-size:12px;color:var(--muted);margin-left:auto;margin-right:10px}
-.ttype{margin-left:8px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:5px;font:600 11px var(--body);padding:2px 4px;vertical-align:4px}
+/* 16px on a phone: iOS zooms the page when a smaller select or input takes focus */
+.ttype{margin-left:8px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:5px;font:600 16px var(--body);padding:6px 4px;vertical-align:4px}
+@media (min-width:720px){.ttype{font-size:11px;padding:2px 4px}}
 .ttype.ovr{border-color:var(--accent);color:var(--accent)}
 .num.ppg.good{color:var(--recv);font-weight:600}
-.cols{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 40px 56px;gap:0 8px;padding:8px 14px 0;font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cols{display:none;grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 40px 56px;gap:0 8px;padding:8px 14px 0;font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .cols span:nth-child(n+3){text-align:right}
+@container roster (min-width:420px){
+  .cols{display:grid}
+  .row{grid-template-columns:36px minmax(0,1fr) 40px 32px 44px 40px 56px;gap:0 8px;padding:5px 4px}
+  .row .badge,.row .val{grid-row:auto;grid-column:auto}
+  .stats{display:contents}
+  .stats .num{text-align:right}.stats .num:empty{display:block}
+  .u{display:none}
+}
 .picks{padding:10px 10px 12px}
 .season{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;align-items:start;padding:5px 4px}
 .season + .season{border-top:1px solid var(--line)}
@@ -127,7 +167,8 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .drop-ok{outline:2px dashed color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:2px}
 .drop-over{outline:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
 .dealbar.solo{grid-template-columns:1fr}
-.rm{appearance:none;border:0;background:none;color:var(--muted);font:700 14px var(--body);line-height:1;padding:0 2px;cursor:pointer}
+.rm{appearance:none;border:0;background:none;color:var(--muted);font:700 16px var(--body);line-height:1;padding:8px 10px;margin:-6px -8px -6px 0;cursor:pointer}
+@media (min-width:720px){.rm{font-size:14px;padding:0 2px;margin:0}}
 .rm:hover{color:var(--send)}.rm:focus-visible{outline:2px solid var(--accent)}
 .mside{margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:8px}
 .mside.me{border-color:var(--accent)}
@@ -154,15 +195,17 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 [data-key]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .vars.custom .var{opacity:.55}.vars.custom .var:hover{opacity:1}
 .custom-head{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
-.clear{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:6px;padding:3px 8px;font:700 11px var(--display);letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.clear{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:6px;padding:10px 12px;font:700 11px var(--display);letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+@media (min-width:720px){.clear{padding:3px 8px}}
 .side li.empty{color:var(--muted);font-style:italic;justify-content:center}
 .hint{margin-top:8px;font-size:12px;color:var(--muted)}
 .who{text-transform:none;font:500 .62em var(--body);letter-spacing:0;color:var(--muted);margin-left:6px;vertical-align:.12em}
 .tab .who{font-size:12px;margin-left:4px;vertical-align:0}
 .tab[aria-selected="true"] .who{color:#1a1400;opacity:.75}
 /* view switch + all-deals comparison */
-.views{display:inline-flex;gap:0;margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.view{appearance:none;border:0;background:var(--panel);color:var(--muted);padding:7px 14px;font:700 13px var(--display);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.views{display:flex;gap:0;margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow-x:auto;scrollbar-width:none}
+.view{flex:1 0 auto;appearance:none;border:0;background:var(--panel);color:var(--muted);padding:11px 12px;font:700 13px var(--display);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;cursor:pointer}
+@media (min-width:720px){.views{display:inline-flex;overflow:hidden}.view{flex:none;padding:7px 14px}}
 .view + .view{border-left:1px solid var(--line)}
 .view[aria-selected="true"]{background:var(--accent);color:#1a1400}
 .view:focus-visible,.open:focus-visible,.ctl select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -170,7 +213,9 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .ctl label{display:inline-flex;align-items:center;gap:6px}
 .wnote{margin:12px 0 0;padding:8px 12px;border:1px solid var(--accent);border-radius:8px;font-size:13px;color:var(--fg)}
 .wnote a{color:var(--accent);cursor:pointer;margin-left:6px}
-.ctl select{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font:500 13px var(--body)}
+.ctl label{max-width:100%}
+.ctl select{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;font:500 16px var(--body);min-width:0;max-width:100%}
+@media (min-width:720px){.ctl select{padding:4px 8px;font-size:13px}}
 .cards{display:flex;flex-direction:column;gap:12px}
 .dcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .dcard > header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:10px 14px;background:var(--panel2);border-bottom:1px solid var(--line)}
@@ -182,9 +227,9 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .fit{font:700 10px var(--display);letter-spacing:.06em;padding:1px 5px;border-radius:3px;background:var(--recv);color:#0b0e14;text-transform:uppercase}
 .open{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:6px;padding:6px 10px;font:700 12px var(--display);letter-spacing:.06em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
 .open:hover{border-color:var(--accent)}
-.vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.vgrid{display:grid;grid-template-columns:minmax(0,1fr)}
 .vcol{padding:10px 14px;min-width:0;display:flex;flex-direction:column}
-.vcol + .vcol{border-left:1px solid var(--line)}
+.vcol + .vcol{border-top:1px solid var(--line)}
 .vcol.tgt{background:color-mix(in srgb,var(--accent) 6%,transparent)}
 .vh{display:flex;justify-content:space-between;align-items:baseline;font:700 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .vcol.tgt .vh > span:first-child{color:var(--accent)}
@@ -193,32 +238,59 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .vcol ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:3px;flex:1}
 .vcol li{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:6px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums}
 .vcol li .badge{font-size:10px;padding:2px 0}
-.vcol li .lb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vcol li .lb{min-width:0;overflow-wrap:anywhere}
 .vcol li .vv{font-family:var(--mono);font-size:11px;color:var(--muted)}
 .vcol .same{color:var(--muted);font-size:12px;font-style:italic;margin-top:6px;flex:1}
 .vt{display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .vt b{font-family:var(--mono);color:var(--fg);font-weight:500}
 .dcard footer{padding:8px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 .dcard footer b{color:var(--fg)}
-@media (max-width:760px){.vgrid{grid-template-columns:1fr}.vcol + .vcol{border-left:0;border-top:1px solid var(--line)}.dcard > header{grid-template-columns:auto minmax(0,1fr)}.dcard .open{grid-column:1 / -1;justify-self:start}}
+.dcard > header{grid-template-columns:auto minmax(0,1fr)}.dcard .open{grid-column:1 / -1;justify-self:start;padding:10px 12px}
+@media (min-width:761px){.vgrid{grid-template-columns:repeat(3,minmax(0,1fr))}.vcol + .vcol{border-top:0;border-left:1px solid var(--line)}.dcard > header{grid-template-columns:auto minmax(0,1fr) auto}.dcard .open{grid-column:auto;justify-self:auto;padding:6px 10px}}
 /* league trade history */
 .hsec{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:12px}
 .hsec h2{font-size:22px;text-transform:uppercase;line-height:1}
 .hsec > .hint{margin:6px 0 0;max-width:80ch}
+/* the two tables: each row is a card (its first cell the heading, the rest labelled by data-l) and the sortable table's headings
+   are a row of sort buttons; real tables from 620px */
 .tw{overflow-x:auto;margin-top:10px}
-.ht{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
-.ht th{font:700 11px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-.ht th:first-child,.ht td:first-child,.ht th.l{text-align:left}
+.ht{display:block;width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.ht thead{display:none}.ht tbody{display:block}
+.ht tbody tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;padding:10px 8px;border-bottom:1px solid var(--line)}
+.ht tbody tr:last-child{border-bottom:0}
+.ht td{display:block;padding:0;text-align:left}
+.ht td.l{grid-column:1 / -1}.ht td:first-child{font-weight:600;font-size:14px}.ht td:empty{display:none}
+.ht td[data-l]::before{content:attr(data-l);display:block;font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ht td.l[data-l]{color:var(--muted)}.ht td.l[data-l]::before{content:none}
+.ht.lb thead{display:block}
+.ht.lb thead tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 0 6px}
+.ht.lb thead tr::before{content:"Sort by";font:700 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ht.lb th{display:block;font:700 11px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:999px}
+.ht.lb th button{display:block;padding:8px 10px}
 .ht th button{all:unset;cursor:pointer}.ht th button:focus-visible{outline:2px solid var(--accent)}
+.ht th[aria-sort]{border-color:var(--accent)}
 .ht th[aria-sort] button{color:var(--accent)}
-.ht td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
-.ht tr:last-child td{border-bottom:0}
-.ht td.l{text-align:left;white-space:normal}
-.ht td small{color:var(--muted);display:block;font-size:11px}
+.ht td small{color:var(--muted);display:block;font-size:11px;font-weight:400}
 .ht .good{color:var(--recv);font-weight:600}.ht .bad{color:var(--send);font-weight:600}.ht .mid{color:var(--muted)}
-.ht tbody tr.me td{background:color-mix(in srgb,var(--accent) 10%,transparent)}
-.ht.lb tbody tr{cursor:pointer}.ht.lb tbody tr:hover td{background:color-mix(in srgb,var(--fg) 5%,transparent)}
-.ht.lb tbody tr.on td{box-shadow:inset 0 -2px 0 var(--accent)}
+.ht tbody tr.me{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.ht.lb tbody tr{cursor:pointer}
+.ht.lb tbody tr.on{box-shadow:inset 3px 0 0 var(--accent)}
+@media (min-width:620px){
+  .ht{display:table}.ht thead,.ht.lb thead{display:table-header-group}.ht tbody{display:table-row-group}
+  .ht tbody tr,.ht.lb thead tr{display:table-row;padding:0;border:0}
+  .ht.lb thead tr::before{content:none}
+  .ht th,.ht.lb th{display:table-cell;font:700 11px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 8px;border:0;border-bottom:1px solid var(--line);border-radius:0;white-space:nowrap}
+  .ht.lb th button{display:inline;padding:0}
+  .ht th:first-child,.ht td:first-child,.ht th.l{text-align:left}
+  .ht td{display:table-cell;padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  .ht td:first-child{font-weight:400;font-size:13px}.ht td:empty{display:table-cell}
+  .ht td[data-l]::before{content:none}
+  .ht tr:last-child td{border-bottom:0}
+  .ht td.l{text-align:left;white-space:normal}.ht td.l[data-l]{color:inherit}
+  .ht tbody tr.me{background:none}.ht tbody tr.me td{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+  .ht.lb tbody tr:hover td{background:color-mix(in srgb,var(--fg) 5%,transparent)}
+  .ht.lb tbody tr.on{box-shadow:none}.ht.lb tbody tr.on td{box-shadow:inset 0 -2px 0 var(--accent)}
+}
 .tlist{display:flex;flex-direction:column;gap:10px;margin-top:4px}
 .tcard{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel2)}
 .tcard.mine{border-color:var(--accent)}
@@ -234,7 +306,7 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 .tside ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:3px}
 .tside li{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:6px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums}
 .tside li .badge{font-size:10px;padding:2px 0}
-.tside li .lb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tside li .lb{min-width:0;overflow-wrap:anywhere}
 .tside li .lb small{color:var(--muted);margin-left:4px}
 .tside li .vv{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
 .tside li .vv b{color:var(--fg);font-weight:500}
