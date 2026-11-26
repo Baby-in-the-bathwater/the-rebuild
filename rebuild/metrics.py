@@ -6,9 +6,7 @@ import datetime as dt
 import statistics as st
 from collections import defaultdict
 
-import numpy as np
-
-from .sleeper import position
+from .league import position
 
 # Per-game thresholds for a "startable" player in a 12-team lineup. Flex-level production.
 TH = {"QB": 14.0, "RB": 9.0, "WR": 9.0, "TE": 7.0}
@@ -163,6 +161,7 @@ def zwithin(rows, keys=None):
 
 
 def corr(xs, ys):
+    import numpy as np
     xs, ys = np.array(xs, float), np.array(ys, float)
     ok = ~np.isnan(xs) & ~np.isnan(ys)
     return float(np.corrcoef(xs[ok], ys[ok])[0, 1]) if ok.sum() > 3 else float("nan")
@@ -170,6 +169,7 @@ def corr(xs, ys):
 
 def ols(rows, xkeys, ykey):
     """Least squares with intercept; returns (coefficients by key, r2, n)."""
+    import numpy as np
     rs = [r for r in rows if all(r.get(k) is not None for k in xkeys + [ykey])]
     if len(rs) < len(xkeys) + 3:
         return {k: float("nan") for k in xkeys}, float("nan"), len(rs)

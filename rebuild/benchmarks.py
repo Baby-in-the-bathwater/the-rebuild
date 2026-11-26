@@ -10,9 +10,8 @@ import time
 from collections import Counter, defaultdict
 
 from .crawl import classify
-from .league import fmt_key, same_family
+from .league import fmt_key, position, same_family
 from .metrics import METRICS, TH, age_at, corr, ols, quantiles, rookie_in, team_rows, zwithin
-from .sleeper import position
 
 POS4 = ("QB", "RB", "WR", "TE")
 BEHAVIOURS = ("sold for picks", "bought (sent picks)", "churned (no net picks)", "stood pat")

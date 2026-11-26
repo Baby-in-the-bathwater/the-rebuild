@@ -6,14 +6,9 @@ projected tier (Early / Mid / Late third of the draft order), the season after f
 further out discounted 15% per extra year."""
 import csv
 import io
-import os
 import re
-import time
 import unicodedata
 
-import requests
-
-URL = "https://raw.githubusercontent.com/dynastyprocess/data/master/files/values.csv"
 ORD = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th", 6: "6th", 7: "7th"}
 FAR_YEAR_DISCOUNT = 0.85
 
@@ -51,17 +46,9 @@ class Values:
                 self.players[(r["pos"], norm(r["player"]))] = v
 
     @classmethod
-    def load(cls, cache_dir, superflex, refresh=False, ttl=20 * 3600):
-        os.makedirs(cache_dir, exist_ok=True)
-        p = os.path.join(cache_dir, "dynastyprocess_values.csv")
-        if refresh or not os.path.exists(p) or time.time() - os.path.getmtime(p) > ttl:
-            r = requests.get(URL, timeout=60)
-            r.raise_for_status()
-            with open(p, "w", encoding="utf-8", newline="") as f:
-                f.write(r.text)
-        with open(p, encoding="utf-8") as f:
-            rows = list(csv.DictReader(io.StringIO(f.read())))
-        return cls(rows, superflex)
+    def from_csv(cls, text, superflex):
+        """Values from the feed's CSV text (`fetch.values_csv` or one historical snapshot)."""
+        return cls(list(csv.DictReader(io.StringIO(text))), superflex)
 
     def player(self, p):
         return self.players.get((p.get("position"), norm(p.get("full_name") or "")), 0)

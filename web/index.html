@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>The Rebuild</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" />
+  </head>
+  <body class="site-page" data-page="form">
+    <main class="site-main">
+      <h1 class="site-title">The Rebuild</h1>
+      <p class="site-lede">Grade a Sleeper dynasty roster and draft the trades that fit it, from your league id and your team.</p>
+      <form id="report-form" class="site-form" novalidate>
+        <label class="site-field">
+          <span>Sleeper league id</span>
+          <input id="league" name="league" inputmode="numeric" autocomplete="off" spellcheck="false" required aria-describedby="league-hint" />
+          <small id="league-hint">The long number in your league's address on sleeper.com.</small>
+        </label>
+        <label class="site-field">
+          <span>Team</span>
+          <input id="team" name="team" autocomplete="off" spellcheck="false" required aria-describedby="team-hint" />
+          <small id="team-hint">Team name, manager name or roster number.</small>
+        </label>
+        <p id="form-error" class="site-message" role="alert" hidden></p>
+        <button class="site-btn site-primary" type="submit">Build the trade board</button>
+      </form>
+      <p class="site-note">The report runs in your browser. Your league is read from Sleeper, and the result is kept only in this browser.</p>
+    </main>
+    <script type="module" src="/src/ui/main.ts"></script>
+  </body>
+</html>
