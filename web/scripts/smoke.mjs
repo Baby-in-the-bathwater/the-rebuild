@@ -6,6 +6,7 @@
 //   SMOKE_CHROME     Chrome executable (default: the macOS install)
 //   SMOKE_PORT       port for wrangler dev (default 8787)
 //   SMOKE_SHOT       if set, a PNG path for a screenshot of the first board
+//   SMOKE_SHOT_FORM  if set, a PNG path for a screenshot of the form page with the league list
 //   SMOKE_SHOT_PHONE if set, a PNG path for a full-page screenshot of the board at phone width
 import { spawn } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -37,9 +38,20 @@ const expected = JSON.parse(readFileSync(join(fixture, "expected", "board-data.j
 const INTERCEPTED = new Set(["api.sleeper.app", "raw.githubusercontent.com"]);
 const ALLOWED = new Set([new URL(ORIGIN).host, ...INTERCEPTED, "fonts.googleapis.com", "fonts.gstatic.com"]);
 
+// The username lookup's two requests are not part of a report, so the fixture has no answer for them: they are made
+// here from the fixture's own league and its first manager whose team is the fixture's team.
+const SLEEPER = "https://api.sleeper.app/v1";
+const league = JSON.parse(http[`${SLEEPER}/league/${meta.league_id}`]);
+const manager = JSON.parse(http[`${SLEEPER}/league/${meta.league_id}/users`]).find((u) => u.metadata?.team_name === meta.team);
+const lookups = {
+  [`${SLEEPER}/user/${manager.username}`]: JSON.stringify(manager),
+  [`${SLEEPER}/user/${manager.user_id}/leagues/nfl/${league.season}`]: JSON.stringify([league]),
+  [`${SLEEPER}/user/nobody-here`]: "null",
+};
+
 function answer(url) {
   const asFixture = url.replaceAll(`/league/${ALIAS}`, `/league/${meta.league_id}`);
-  const body = http[asFixture];
+  const body = http[asFixture] ?? lookups[asFixture];
   return body === undefined ? undefined : body.replaceAll(JSON.stringify(meta.league_id), JSON.stringify(ALIAS));
 }
 
@@ -157,18 +169,43 @@ try {
   });
   const team = expected.teams.find((t) => t.rid !== expected.me_rid).name;
 
-  // 1. The form refuses a league id that is not all digits, then goes to the board for a valid one.
+  // 1. The league id form, behind its link, refuses a league id that is not all digits.
   await page.goto(`${ORIGIN}/`, { waitUntil: "load" });
+  await page.click("#by-id > summary");
   await page.type("#league", meta.league_id);
   await page.type("#team", meta.team);
-  await page.click("button[type=submit]");
+  await page.click("#report-form button[type=submit]");
   await page.waitForSelector("#form-error:not([hidden])");
   if (new URL(page.url()).pathname !== "/") fail(`an invalid league id navigated to ${page.url()}`);
-  await page.$eval("#league", (n) => (n.value = ""));
-  await page.type("#league", ALIAS);
-  await Promise.all([page.waitForNavigation(), page.click("button[type=submit]")]);
+
+  // 1b. An unknown username gets a message; a known one lists its league with the user's own team selected, and
+  // "Build the trade board" goes to the board for that league and roster. Meanwhile the page has fetched the
+  // engine's files, so the board page finds them in the cache.
+  await page.type("#username", "nobody-here");
+  await page.click("#find");
+  await page.waitForSelector("#user-error:not([hidden])");
+  const unknownUser = await page.$eval("#user-error", (n) => n.textContent);
+  if (!unknownUser.includes("nobody-here")) fail(`an unknown username showed: "${unknownUser}"`);
+  await page.$eval("#username", (n) => (n.value = ""));
+  await page.type("#username", manager.username);
+  await page.click("#find");
+  await page.waitForSelector("#pick-form:not([hidden])");
+  const pick = await page.evaluate(() => ({
+    leagues: [...document.querySelectorAll(".site-league")].map((n) => n.textContent),
+    chosen: document.querySelector("#leagues input:checked")?.value,
+    team: document.querySelector("#pick-team").selectedOptions[0]?.textContent,
+    sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }));
+  if (pick.leagues.length !== 1 || !pick.leagues[0].includes(league.name)) fail(`the league list is ${JSON.stringify(pick.leagues)}`);
+  if (pick.chosen !== ALIAS) fail(`the chosen league is ${pick.chosen}, not ${ALIAS}`);
+  if (!pick.team?.startsWith(meta.team)) fail(`the selected team is "${pick.team}", not ${meta.team}`);
+  if (process.env.SMOKE_SHOT_FORM) await page.screenshot({ path: process.env.SMOKE_SHOT_FORM, fullPage: true });
+  const warmed = ["/engine/engine.zip", "pyodide.asm.wasm"].filter((name) => !requests.some((u) => u.endsWith(name)));
+  if (warmed.length) fail(`the form page did not fetch ${warmed.join(", ")} ahead of time`);
+  await Promise.all([page.waitForNavigation(), page.click("#pick-form button[type=submit]")]);
   const boardUrl = page.url();
-  console.log(`form -> ${boardUrl.replace(ORIGIN, "")}`);
+  if (!/[?&]team=\d+$/.test(boardUrl)) fail(`the board address does not carry a roster number: ${boardUrl}`);
+  console.log(`username -> ${boardUrl.replace(ORIGIN, "")}`);
 
   // 2. Progress, then the board.
   await page.waitForSelector("#rosters .panel", { timeout: 120_000 });

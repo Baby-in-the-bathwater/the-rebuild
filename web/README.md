@@ -1,6 +1,6 @@
 # The Rebuild: web
 
-A static TypeScript site that runs the CLI's report in the browser. The form page (`/`) takes a Sleeper league id and a team; the board page (`/board?league=<id>&team=<text>`) runs the report in a Web Worker (the unchanged Python engine under Pyodide), shows its progress, then shows the same trade board the CLI writes. It deploys as Cloudflare Workers static assets: there is no server code and no Worker script.
+A static TypeScript site that runs the CLI's report in the browser. The form page (`/`) takes a Sleeper username, lists that user's leagues and lets them pick a league and a team (a league id and a team can also be typed in); the board page (`/board?league=<id>&team=<text>`) runs the report in a Web Worker (the unchanged Python engine under Pyodide), shows its progress, then shows the same trade board the CLI writes. It deploys as Cloudflare Workers static assets: there is no server code and no Worker script.
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ Install with `pnpm install --frozen-lockfile`. The esbuild and Wrangler's worker
 - `pnpm typecheck`: run `tsc --noEmit`.
 - `pnpm test`: run the Vitest suite once.
 - `pnpm preview`: serve `dist/` locally with `wrangler dev` (run `pnpm build` first).
-- `node scripts/smoke.mjs`: the browser smoke test (not part of CI; run `pnpm build` first). It copies `dist/` to a temporary folder outside the repo, adds the synthetic fixture's `players.json` and `snapshot_index.json` to the copy's `data/`, serves the copy with `wrangler dev --assets` (so `dist/` never holds fixture data), removes it at the end, and drives headless Chrome through the form, the board, a reload from the cache, the board at phone width (no sideways scroll, no cut-off names, one roster on screen), a malformed league id and an unknown one, answering Sleeper and GitHub from `fixtures/synth/http.json`. It needs Chrome and `puppeteer-core`, which is not a dependency of this package: set `SMOKE_CHROME` and `SMOKE_PUPPETEER` (a `node_modules` folder holding `puppeteer-core`) if the defaults do not fit your machine. It stops at once if its port (`SMOKE_PORT`, default 8787) is taken.
+- `node scripts/smoke.mjs`: the browser smoke test (not part of CI; run `pnpm build` first). It copies `dist/` to a temporary folder outside the repo, adds the synthetic fixture's `players.json` and `snapshot_index.json` to the copy's `data/`, serves the copy with `wrangler dev --assets` (so `dist/` never holds fixture data), removes it at the end, and drives headless Chrome through the league id form, the username lookup (an unknown username, then a known one and its league list), the board, a reload from the cache, the board at phone width (no sideways scroll, no cut-off names, one roster on screen), a malformed league id and an unknown one, answering Sleeper and GitHub from `fixtures/synth/http.json`. It needs Chrome and `puppeteer-core`, which is not a dependency of this package: set `SMOKE_CHROME` and `SMOKE_PUPPETEER` (a `node_modules` folder holding `puppeteer-core`) if the defaults do not fit your machine. It stops at once if its port (`SMOKE_PORT`, default 8787) is taken.
 
 ## Data files
 
@@ -42,7 +42,9 @@ The Checks workflow never runs the script and makes no request to Sleeper or Git
 - `/` is `index.html`; `/board` is `board.html`. Wrangler's default `html_handling` (`auto-trailing-slash`) serves `board.html` at `/board` and redirects `/board.html` there, keeping the query; Vite's dev server serves `/board` the same way with no extra config.
 - An unknown path gets `public/404.html` with a 404 status (`not_found_handling: "404-page"` in `wrangler.jsonc`).
 - `/board` without a league or team links back to the form. `?fresh=1` (what "Refresh data" adds) rebuilds the report instead of using the 30-minute cache, and is then removed from the address.
-- The last league and team entered are kept in `localStorage` under `rebuild-last`; the board keeps its own selection under `rebuild-board-<league id>`, as the CLI's file does.
+- The form page fetches the engine's files (`/engine/engine.zip` and the Pyodide runtime) as soon as it has loaded, so the board page finds them in the browser's cache. The engine still starts on the board page: its worker does not outlive the page.
+- The username lookup sends the board page the roster number as `team` (for example `/board?league=<id>&team=3`), so two teams with the same name cannot be confused. The address alone rebuilds the report in any browser.
+- The last username, league and team entered are kept in `localStorage` under `rebuild-last`; the board keeps its own selection under `rebuild-board-<league id>`, as the CLI's file does.
 
 ## The Python runtime
 

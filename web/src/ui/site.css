@@ -38,8 +38,31 @@ body.site-page {
   width:100%; font:500 16px var(--site-body); color:var(--site-fg); background:var(--site-bg);
   border:1px solid var(--site-line); border-radius:6px; padding:10px 12px;
 }
-.site-field input:focus-visible { outline:2px solid var(--site-accent); outline-offset:1px; border-color:var(--site-accent) }
+.site-field select {
+  width:100%; font:500 16px var(--site-body); color:var(--site-fg); background:var(--site-bg);
+  border:1px solid var(--site-line); border-radius:6px; padding:10px 12px;
+}
+.site-field input:focus-visible, .site-field select:focus-visible { outline:2px solid var(--site-accent); outline-offset:1px; border-color:var(--site-accent) }
 .site-field input[aria-invalid="true"] { border-color:var(--site-bad) }
+
+/* The league picker a username fills, and the league id form behind its disclosure. */
+.site-form + .site-form, .site-details { margin-top:16px }
+.site-h2 { font:700 22px/1.1 var(--site-display); letter-spacing:.01em; text-transform:uppercase; margin:0; overflow-wrap:anywhere }
+.site-h2:focus { outline:none }
+.site-leagues { display:grid; gap:8px }
+.site-league {
+  display:grid; grid-template-columns:auto minmax(0, 1fr); gap:12px; align-items:start; padding:12px;
+  background:var(--site-bg); border:1px solid var(--site-line); border-radius:8px; cursor:pointer;
+}
+.site-league:has(input:checked) { border-color:var(--site-accent) }
+.site-league:has(input:focus-visible) { outline:2px solid var(--site-accent); outline-offset:1px }
+.site-league input { width:18px; height:18px; margin:2px 0 0; accent-color:var(--site-accent) }
+.site-league-text { display:grid; gap:2px; min-width:0 }
+.site-league-name { font-weight:600; overflow-wrap:anywhere }
+.site-league-meta { color:var(--site-muted); font-size:13px; overflow-wrap:anywhere }
+.site-details > summary { color:var(--site-accent); cursor:pointer; padding:8px 0; width:max-content; max-width:100% }
+.site-details > summary:focus-visible { outline:2px solid var(--site-accent); outline-offset:2px }
+.site-details[open] > summary { margin-bottom:8px }
 
 .site-message { margin:0; color:var(--site-bad); white-space:pre-line; overflow-wrap:anywhere }
 .site-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px }

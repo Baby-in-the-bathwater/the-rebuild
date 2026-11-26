@@ -10,21 +10,44 @@
   <body class="site-page" data-page="form">
     <main class="site-main">
       <h1 class="site-title">The Rebuild</h1>
-      <p class="site-lede">Grade a Sleeper dynasty roster and draft the trades that fit it, from your league id and your team.</p>
-      <form id="report-form" class="site-form" novalidate>
+      <p class="site-lede">Grade a Sleeper dynasty roster and draft the trades that fit it. Start with your Sleeper username.</p>
+      <form id="user-form" class="site-form" novalidate>
         <label class="site-field">
-          <span>Sleeper league id</span>
-          <input id="league" name="league" inputmode="numeric" autocomplete="off" spellcheck="false" required aria-describedby="league-hint" />
-          <small id="league-hint">The long number in your league's address on sleeper.com.</small>
+          <span>Sleeper username</span>
+          <input id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required aria-describedby="username-hint" />
+          <small id="username-hint">The username on your Sleeper profile. No password is needed: Sleeper's league data is public.</small>
         </label>
+        <p id="user-error" class="site-message" role="alert" hidden></p>
+        <button id="find" class="site-btn site-primary" type="submit">Find my leagues</button>
+      </form>
+      <form id="pick-form" class="site-form site-pick" novalidate hidden>
+        <h2 id="pick-title" class="site-h2" tabindex="-1"></h2>
+        <div id="leagues" class="site-leagues" role="radiogroup" aria-labelledby="pick-title"></div>
         <label class="site-field">
           <span>Team</span>
-          <input id="team" name="team" autocomplete="off" spellcheck="false" required aria-describedby="team-hint" />
-          <small id="team-hint">Team name, manager name or roster number.</small>
+          <select id="pick-team" name="pick-team" aria-describedby="pick-team-hint"></select>
+          <small id="pick-team-hint">Your own team is selected. Pick another to see the league from its side.</small>
         </label>
-        <p id="form-error" class="site-message" role="alert" hidden></p>
+        <p id="pick-error" class="site-message" role="alert" hidden></p>
         <button class="site-btn site-primary" type="submit">Build the trade board</button>
       </form>
+      <details id="by-id" class="site-details">
+        <summary>Enter a league id instead</summary>
+        <form id="report-form" class="site-form" novalidate>
+          <label class="site-field">
+            <span>Sleeper league id</span>
+            <input id="league" name="league" inputmode="numeric" autocomplete="off" spellcheck="false" required aria-describedby="league-hint" />
+            <small id="league-hint">The long number in your league's address on sleeper.com.</small>
+          </label>
+          <label class="site-field">
+            <span>Team</span>
+            <input id="team" name="team" autocomplete="off" spellcheck="false" required aria-describedby="team-hint" />
+            <small id="team-hint">Team name, manager name or roster number.</small>
+          </label>
+          <p id="form-error" class="site-message" role="alert" hidden></p>
+          <button class="site-btn site-primary" type="submit">Build the trade board</button>
+        </form>
+      </details>
       <p class="site-note">The report runs in your browser. Your league is read from Sleeper, and the result is kept only in this browser.</p>
     </main>
     <script type="module" src="/src/ui/main.ts"></script>

@@ -1,5 +1,8 @@
 // The site's one entry: index.html (the form) and board.html (the board) say which page they are on <body data-page>.
 import "./site.css";
+import { createSleeper } from "../data/sleeper";
+import { findLeagues } from "../data/user";
+import { warmEngine } from "../engine/warm";
 import { startForm } from "./form";
 
 const storage = (() => {
@@ -39,5 +42,15 @@ if (document.body.dataset.page === "board") {
     .then(({ startBoard }) => startBoard(document, window))
     .catch(() => showLoadFailure(document));
 } else {
-  startForm(document, { storage, navigate: (url) => window.location.assign(url) });
+  const sleeper = createSleeper({ fetch: (input, init) => window.fetch(input, init) });
+  startForm(document, {
+    storage,
+    navigate: (url) => window.location.assign(url),
+    findLeagues: (username) => findLeagues(sleeper, username),
+  });
+  // Download the engine while the visitor types and picks, once the page itself has loaded, so the board page
+  // finds it in the cache.
+  const warm = () => void warmEngine((input, init) => window.fetch(input, init));
+  if (document.readyState === "complete") warm();
+  else window.addEventListener("load", warm, { once: true });
 }
